@@ -1,0 +1,66 @@
+Memo
+
+
+customer_support_faq.txt
+medical_qa.txt
+sciq_qa.txt
+legal_qa.txt
+
+（1）開発の準備
+・requirements.txt から必要なソフトをインストールする。
+python -m pip install -r requirements.txt
+
+（2）HuggingFaceから、テスト用データとして、以下をダウンロードする。
+[a30_00_dl_dataset_from_huggingface.py]
+customer_support_faq.csv    ① カスタマーサポート・FAQデータセット
+trivia_qa.csv               ② 一般知識・トリビアQAデータセット
+medical_qa.csv              ③ 医療質問回答データセット
+sciq_qa.csv                 ④ 科学・技術QAデータセット
+legal_qa.csv                ⑤ 法律・判例QAデータセット
+
+（3）それぞれのダウンロードしたCSVファイルをRAG用のデータとして加工し、TXTファイルを作成する。
+[a30_011_make_rag_data_customer.py]
+[a30_013_make_rag_data_medical.py]
+[a30_014_make_rag_data_sciq.py]
+[a30_015_make_rag_data_legal.py]
+
+（4）RAG用のデータとして加工ずみのTXTファイルをOpenAIのvector storeに登録する。
+[a30_020_make_vsid.py]
+
+（5）vector store に登録されたデータを利用して、検索を実施する。
+[a30_30_rag_search.py]
+
+（6）ヘルパー関数
+helper_api.py
+helper_rag.py
+helper_st.py
+
+
+# ----------------------------------------------
+
+下記仕様で設計書を作成せよ。
+不足情報があれば、指摘せよ。
+
+仕様書：
+仕様書、詳細設計書、各種、処理フローの作成
+
+概要書
+・処理の概要
+・mainの処理の流れ
+
+クラス、関数・一覧
+・列データ：　関数名, 処理概要
+
+関数の詳細設計書
+・処理概要
+・処理の流れ
+・IPO(INPUT、PROCESS、OUTPUT)
+
+----------------------------------
+Legal Q&A: vs_687a062418ec8191872efdbf8f554836
+Science & Technology Q&A: vs_687a061acc908191af7d5d9ba623470b
+Medical Q&A: vs_687a060f9ed881918b213bfdeab8241b
+Customer Support FAQ: vs_687a0604f1508191aaf416d88e266ab7
+----------
+
+

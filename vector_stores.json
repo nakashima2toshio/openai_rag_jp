@@ -1,0 +1,11 @@
+{
+  "vector_stores": {
+    "Legal Q&A": "vs_687f3e15d9048191a9aebf58d8aaea31",
+    "Science & Technology Q&A": "vs_687f3dfa3a9c81918d69744da9ba6fbc",
+    "Medical Q&A": "vs_687f3d37828c8191a87781bc8339272a",
+    "Customer Support FAQ": "vs_687f3e9473fc8191af9c4c87bb63ed0c"
+  },
+  "last_updated": "2025-07-23T22:39:47.805246",
+  "source": "a30_30_rag_search.py",
+  "version": "1.0"
+}
