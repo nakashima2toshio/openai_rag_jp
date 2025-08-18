@@ -1,10 +1,28 @@
 Memo
 
+ワークフローをまとめ、整理したい。
+以下のそれぞれのアプリの処理概要をまとめ、一覧表にし、
 
-customer_support_faq.txt
-medical_qa.txt
-sciq_qa.txt
-legal_qa.txt
+
+[RAGデータのダウンロード]HuggingFaceからテスト用データとしてCSVデータをダウンロードする。
+a30_00_dl_dataset_from_huggingface.py
+- 処理・概要(IPO)：
+
+[RAGデータ作成]ダウンロードしたCSVファイルをRAG用のデータとして加工しTXTファイルを作成する。
+a30_011_make_rag_data_customer.py
+a30_013_make_rag_data_medical.py
+a30_014_make_rag_data_sciq.py
+a30_015_make_rag_data_legal.py
+- 処理・概要(IPO)：
+
+[vsid登録]RAG用のデータとして加工ずみのTXTファイルをOpenAIのvector storeに登録する。
+a30_020_make_vsid.py
+- 処理・概要(IPO)：
+
+[vs検索]vector storeに登録されたデータを利用して検索を実施する。
+a30_30_rag_search.py
+- 処理・概要(IPO)：
+
 
 （1）開発の準備
 ・requirements.txt から必要なソフトをインストールする。

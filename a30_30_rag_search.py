@@ -159,7 +159,7 @@ class VectorStoreManager:
 
         try:
             # OpenAI APIからVector Store一覧を取得
-            stores_response = self.openai_client.vector_stores.list()
+            stores_response = self.openai_client.beta.vector_stores.list()
 
             # Vector Storeを作成日時でソート（新しい順）
             sorted_stores = sorted(
@@ -451,87 +451,129 @@ class ModernRAGManager:
 
     def search_with_responses_api(self, query: str, store_name: str, store_id: str, **kwargs) -> Tuple[
         str, Dict[str, Any]]:
-        """最新Responses API + file_search ツールを使用した検索"""
+        """Chat Completions API + file_search ツールを使用した検索"""
         try:
-            # file_search ツールの設定（正しい型で定義）
-            file_search_tool_dict: Dict[str, Any] = {
-                "type"            : "file_search",
-                "vector_store_ids": [store_id]
+            # file_search ツールの設定
+            file_search_tool = {
+                "type": "file_search",
+                "file_search": {
+                    "max_num_results": kwargs.get('max_results', 20)
+                }
             }
 
-            # オプション設定（型安全な方法）
-            max_results = kwargs.get('max_results', 20)
-            include_results = kwargs.get('include_results', True)
-            filters = kwargs.get('filters', None)
-
-            # 型安全な辞書更新
-            if max_results and isinstance(max_results, int):
-                file_search_tool_dict["max_num_results"] = max_results
-            if filters is not None:
-                file_search_tool_dict["filters"] = filters
-
-            # include パラメータの設定
-            include_params = []
-            if include_results:
-                include_params.append("file_search_call.results")
-
-            # Responses API呼び出し（型安全な方法）
-            # OpenAI SDKの型定義が厳密なため、実際の動作に問題がない場合は型チェックを無視
-            response = openai_client.responses.create(
-                model="gpt-4o-mini",
-                input=query,
-                tools=[file_search_tool_dict],  # type: ignore[arg-type]
-                include=include_params if include_params else None
+            # 選択されたモデルを取得
+            selected_model = kwargs.get('model', 'gpt-4o-mini')
+            
+            # Assistant作成（一時的）
+            assistant = openai_client.beta.assistants.create(
+                name=f"RAG_Assistant_{store_name.replace(' ', '_')}",
+                instructions=f"You are a helpful assistant specializing in {store_name}. Search through the vector store to find relevant information and provide accurate, helpful responses.",
+                model=selected_model,
+                tools=[file_search_tool],
+                tool_resources={
+                    "file_search": {
+                        "vector_store_ids": [store_id]
+                    }
+                }
             )
 
-            # レスポンステキストの抽出
-            response_text = self._extract_response_text(response)
+            # Thread作成
+            thread = openai_client.beta.threads.create()
 
-            # ファイル引用の抽出
-            citations = self._extract_citations(response)
+            # メッセージ追加
+            openai_client.beta.threads.messages.create(
+                thread_id=thread.id,
+                role="user",
+                content=query
+            )
 
-            # メタデータの構築（型を明示的に指定）
+            # Run実行
+            run = openai_client.beta.threads.runs.create(
+                thread_id=thread.id,
+                assistant_id=assistant.id
+            )
+
+            # Run完了まで待機
+            import time
+            while run.status in ['queued', 'in_progress', 'cancelling']:
+                time.sleep(1)
+                run = openai_client.beta.threads.runs.retrieve(
+                    thread_id=thread.id,
+                    run_id=run.id
+                )
+
+            # メッセージ取得
+            messages = openai_client.beta.threads.messages.list(
+                thread_id=thread.id
+            )
+
+            # 最新のアシスタントメッセージを取得
+            response_text = "回答を取得できませんでした"
+            citations = []
+            
+            for message in messages.data:
+                if message.role == "assistant":
+                    for content_block in message.content:
+                        if content_block.type == "text":
+                            response_text = content_block.text.value
+                            # ファイル引用の抽出
+                            if hasattr(content_block.text, 'annotations'):
+                                for annotation in content_block.text.annotations:
+                                    if annotation.type == "file_citation":
+                                        citations.append({
+                                            "file_id": annotation.file_citation.file_id,
+                                            "filename": annotation.file_citation.quote if hasattr(annotation.file_citation, 'quote') else 'Unknown file',
+                                            "index": len(citations)
+                                        })
+                    break
+
+            # リソースクリーンアップ
+            try:
+                openai_client.beta.assistants.delete(assistant.id)
+                openai_client.beta.threads.delete(thread.id)
+            except Exception as cleanup_error:
+                logger.warning(f"リソースクリーンアップエラー: {cleanup_error}")
+
+            # メタデータの構築
             metadata: Dict[str, Any] = {
                 "store_name": store_name,
                 "store_id"  : store_id,
                 "query"     : query,
                 "timestamp" : datetime.now().isoformat(),
-                "model"     : "gpt-4o-mini",
-                "method"    : "responses_api_file_search",
+                "model"     : selected_model,
+                "method"    : "chat_completions_file_search",
                 "citations" : citations,
-                "tool_calls": self._extract_tool_calls(response)
+                "run_status": run.status
             }
 
-            # 使用統計があれば追加（型安全な方法）
-            if hasattr(response, 'usage') and response.usage is not None:
+            # 使用統計があれば追加
+            if hasattr(run, 'usage') and run.usage is not None:
                 try:
-                    # ResponseUsageオブジェクトを辞書に変換
-                    if hasattr(response.usage, 'model_dump'):
-                        metadata["usage"] = response.usage.model_dump()
-                    elif hasattr(response.usage, 'dict'):
-                        metadata["usage"] = response.usage.dict()
+                    if hasattr(run.usage, 'model_dump'):
+                        metadata["usage"] = run.usage.model_dump()
+                    elif hasattr(run.usage, 'dict'):
+                        metadata["usage"] = run.usage.dict()
                     else:
-                        # 手動で属性を抽出
                         usage_dict = {}
                         for attr in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
-                            if hasattr(response.usage, attr):
-                                usage_dict[attr] = getattr(response.usage, attr)
+                            if hasattr(run.usage, attr):
+                                usage_dict[attr] = getattr(run.usage, attr)
                         metadata["usage"] = usage_dict
                 except Exception as e:
                     logger.warning(f"使用統計の変換に失敗: {e}")
-                    metadata["usage"] = str(response.usage)
+                    metadata["usage"] = str(run.usage)
 
             return response_text, metadata
 
         except Exception as e:
-            error_msg = f"Responses API検索でエラーが発生しました: {str(e)}"
+            error_msg = f"Chat Completions API検索でエラーが発生しました: {str(e)}"
             logger.error(error_msg)
             logger.error(traceback.format_exc())
 
             # エラー時のメタデータ（型安全）
             error_metadata: Dict[str, Any] = {
                 "error"     : str(e),
-                "method"    : "responses_api_error",
+                "method"    : "chat_completions_error",
                 "store_name": store_name,
                 "store_id"  : store_id,
                 "query"     : query,
@@ -688,6 +730,8 @@ def initialize_session_state():
         st.session_state.selected_store = store_list[0] if store_list else "Customer Support FAQ"
     if 'selected_language' not in st.session_state:
         st.session_state.selected_language = "English"  # デフォルトは英語（RAGデータに合わせて）
+    if 'selected_model' not in st.session_state:
+        st.session_state.selected_model = "gpt-4o-mini"  # デフォルトモデル
     if 'use_agent_sdk' not in st.session_state:
         st.session_state.use_agent_sdk = False  # デフォルトはResponses API直接使用
     if 'search_options' not in st.session_state:
@@ -1064,6 +1108,39 @@ def main():
             st.error("❌ 利用可能なVector Storeがありません")
             st.stop()
 
+        # テスト用質問（選択されたVector Storeに対応）
+        st.markdown("---")
+        with st.expander("💡 テスト用質問", expanded=True):
+            display_test_questions()
+
+        # モデル選択
+        st.markdown("---")
+        
+        # 利用可能なモデル一覧（Assistants API対応モデルのみ）
+        available_models = [
+            "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"
+        ]
+        
+        try:
+            current_model_index = available_models.index(st.session_state.selected_model)
+        except ValueError:
+            current_model_index = available_models.index("gpt-4o-mini")  # デフォルト
+            
+        selected_model = st.selectbox(
+            "モデルを選択",
+            options=available_models,
+            index=current_model_index,
+            key="model_selection",
+            help="RAG検索に使用するモデルを選択"
+        )
+        st.session_state.selected_model = selected_model
+        
+        # モデル情報表示
+        if "o1" in selected_model or "o3" in selected_model or "o4" in selected_model or "gpt-5" in selected_model:
+            st.info("🧠 推論・最先端モデル")
+        else:
+            st.info("⚡ 標準モデル")
+
         # 言語選択
         st.markdown("---")
         selected_language = st.selectbox(
@@ -1081,6 +1158,7 @@ def main():
         else:
             st.warning("⚠️ RAGデータは英語です")
 
+
         # 検索オプション
         display_search_options()
 
@@ -1091,10 +1169,6 @@ def main():
 
         # システム情報
         display_system_info()
-
-        # テスト用質問（選択されたVector Storeに対応）
-        with st.expander("💡 テスト用質問", expanded=True):
-            display_test_questions()
 
     # メインコンテンツ
     col1, col2 = st.columns([1, 1])
@@ -1138,7 +1212,8 @@ def main():
                         selected_store_id,
                         use_agent_sdk=st.session_state.use_agent_sdk,
                         max_results=search_options['max_results'],
-                        include_results=search_options['include_results']
+                        include_results=search_options['include_results'],
+                        model=st.session_state.selected_model
                     )
 
                 # 結果表示

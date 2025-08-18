@@ -136,7 +136,7 @@ class ConfigManager:
         """デフォルト設定"""
         return {
             "models"        : {
-                "default"  : "gpt-4o-mini",
+                "default"  : "gpt-5-mini",
                 "available": ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini"]
             },
             "api"           : {
