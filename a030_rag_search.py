@@ -1,5 +1,5 @@
-# streamlit run a30_30_rag_search.py --server.port=8501
-# a30_30_rag_search.py - 最新OpenAI Responses API完全対応版（動的Vector Store対応・重複問題修正版）
+# streamlit run a030_rag_search.py --server.port=8501
+# a030_rag_search.py - 最新OpenAI Responses API完全対応版（動的Vector Store対応・重複問題修正版）
 # OpenAI Responses API + file_search ツール + 環境変数APIキー対応 + 動的Vector Store ID管理
 """
 🔍 最新RAG検索アプリケーション（動的Vector Store対応・重複問題修正版）
@@ -13,7 +13,7 @@
    pip install openai-agents
 
 【実行方法】
-streamlit run a30_30_rag_search.py --server.port=8501
+streamlit run a030_rag_search.py --server.port=8501
 
 【主要機能】
 ✅ 最新Responses API使用
@@ -28,7 +28,7 @@ streamlit run a30_30_rag_search.py --server.port=8501
 ✅ 最新Vector Store自動取得・更新機能
 
 【Vector Store連携】
-- a30_020_make_vsid.py で作成されたVector Storeを自動認識
+- a020_make_vsid.py で作成されたVector Storeを自動認識
 - vector_stores.json ファイルで動的管理
 - 同名Vector Store重複時は最新作成日時を優先
 - OpenAI APIから最新状態を取得・更新
@@ -85,7 +85,7 @@ class VectorStoreManager:
         "Legal Q&A"               : "vs_687a062418ec8191872efdbf8f554836"
     }
 
-    # a30_020_make_vsid.py のVectorStoreConfigと対応するマッピング
+    # a020_make_vsid.py のVectorStoreConfigと対応するマッピング
     STORE_NAME_MAPPING = {
         "customer_support_faq": "Customer Support FAQ Knowledge Base",
         "medical_qa"          : "Medical Q&A Knowledge Base",
@@ -136,7 +136,7 @@ class VectorStoreManager:
             config_data = {
                 "vector_stores": stores,
                 "last_updated" : datetime.now().isoformat(),
-                "source"       : "a30_30_rag_search.py",
+                "source"       : "a030_rag_search.py",
                 "version"      : "1.1"
             }
 
@@ -1292,7 +1292,7 @@ def main():
 
                 - **自動更新**: OpenAI APIから最新のVector Store一覧を取得
                 - **設定ファイル連携**: `vector_stores.json` で永続化
-                - **a30_020_make_vsid.py 連携**: 新規作成されたVector Storeを自動認識
+                - **a020_make_vsid.py 連携**: 新規作成されたVector Storeを自動認識
                 - **フォールバック**: 設定ファイルがない場合はデフォルト値を使用
 
                 **設定ファイル形式:**
@@ -1304,7 +1304,7 @@ def main():
                     ...
                   },
                   "last_updated": "2025-01-XX...",
-                  "source": "a30_30_rag_search.py",
+                  "source": "a030_rag_search.py",
                   "version": "1.1"
                 }
                 ```
@@ -1338,7 +1338,7 @@ def main():
                 **Vector Store関連エラー:**
                 - Vector Store IDが正しいか確認
                 - 「最新情報に更新」ボタンで再取得
-                - a30_020_make_vsid.py で新規作成後は更新が必要
+                - a020_make_vsid.py で新規作成後は更新が必要
 
                 **その他のエラー:**
                 - OpenAI SDKが最新版か確認: `pip install --upgrade openai`
@@ -1355,7 +1355,7 @@ def main():
     st.markdown("#### 最新RAG検索アプリケーション（重複問題修正・最新ID優先版）")
     st.markdown("🚀 **OpenAI Responses API + file_search ツール** による次世代RAG")
     st.markdown("✨ **修正機能**: 重複Vector Store ID問題解決、最新作成日時優先")
-    st.markdown("🔗 **a30_020_make_vsid.py 連携**: 新規Vector Store自動認識")
+    st.markdown("🔗 **a020_make_vsid.py 連携**: 新規Vector Store自動認識")
     st.markdown("🔑 **セキュリティ**: 環境変数でのAPIキー管理")
     if AGENT_SDK_AVAILABLE:
         st.markdown("🔧 **Agent SDK**: セッション管理サポート（簡易版）")
@@ -1366,4 +1366,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# streamlit run a30_30_rag_search.py --server.port=8501
+# streamlit run a030_rag_search.py --server.port=8501

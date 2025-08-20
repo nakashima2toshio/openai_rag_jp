@@ -1,6 +1,6 @@
-# a30_013_make_rag_data_medical.py
-# 医療QAデータのRAG前処理（helper_rag.py利用版）
-# streamlit run a30_013_make_rag_data_medical.py --server.port=8503
+# a014_make_rag_data_sciq.py
+# 科学・技術QAデータのRAG前処理（helper_rag.py利用版）
+# streamlit run a014_make_rag_data_sciq.py --server.port=8504
 
 import streamlit as st
 import pandas as pd
@@ -27,16 +27,17 @@ logger = logging.getLogger(__name__)
 
 
 # ==================================================
-# 医療QA特有の処理関数
+# SciQ（科学・技術QA）特有の処理関数
 # ==================================================
-def validate_medical_data_specific(df) -> List[str]:
-    """医療QAデータ特有の検証"""
-    medical_issues = []
+def validate_sciq_data_specific(df) -> List[str]:
+    """SciQ（科学・技術QA）データ特有の検証"""
+    sciq_issues = []
 
-    # 医療関連用語の存在確認
-    medical_keywords = [
-        '症状', '診断', '治療', '薬', '病気', '疾患', '患者',
-        'symptom', 'diagnosis', 'treatment', 'medicine', 'disease', 'patient'
+    # 科学・技術関連用語の存在確認
+    science_keywords = [
+        '化学', '物理', '生物', '数学', '地理', '天文', '医学', '工学',
+        'chemistry', 'physics', 'biology', 'math', 'geography', 'astronomy',
+        'medicine', 'engineering', 'science', 'theory', 'experiment', 'formula'
     ]
 
     # 大文字小文字を考慮した列名検索
@@ -47,48 +48,61 @@ def validate_medical_data_specific(df) -> List[str]:
             break
 
     if question_col is not None:
-        questions_with_medical_terms = 0
+        questions_with_science_terms = 0
         for _, row in df.iterrows():
             question_text = str(row.get(question_col, '')).lower()
-            if any(keyword in question_text for keyword in medical_keywords):
-                questions_with_medical_terms += 1
+            if any(keyword in question_text for keyword in science_keywords):
+                questions_with_science_terms += 1
 
-        medical_ratio = (questions_with_medical_terms / len(df)) * 100
-        medical_issues.append(f"医療関連用語を含む質問: {questions_with_medical_terms:,}件 ({medical_ratio:.1f}%)")
+        science_ratio = (questions_with_science_terms / len(df)) * 100
+        sciq_issues.append(f"科学・技術関連用語を含む質問: {questions_with_science_terms:,}件 ({science_ratio:.1f}%)")
 
-    # 回答の長さ分析（医療回答は通常詳細）
-    response_col = None
+    # 回答の種類分析（選択肢形式vs記述形式）
+    answer_col = None
     for col in df.columns:
-        if 'response' in col.lower():
-            response_col = col
+        if 'correct_answer' in col.lower() or 'answer' in col.lower():
+            answer_col = col
             break
 
-    if response_col is not None:
-        response_lengths = df[response_col].astype(str).str.len()
-        avg_response_length = response_lengths.mean()
-        if avg_response_length < 100:
-            medical_issues.append(f"⚠️ 平均回答長が短い可能性: {avg_response_length:.0f}文字")
-        else:
-            medical_issues.append(f"✅ 適切な回答長: 平均{avg_response_length:.0f}文字")
+    if answer_col is not None:
+        answer_lengths = df[answer_col].astype(str).str.len()
+        avg_answer_length = answer_lengths.mean()
 
-    # Complex_CoT（推論過程）の分析
-    cot_col = None
+        # 短い回答（選択肢形式）と長い回答（記述形式）の判定
+        short_answers = (answer_lengths <= 50).sum()
+        long_answers = (answer_lengths > 50).sum()
+
+        sciq_issues.append(f"短い回答（≤50文字）: {short_answers:,}件")
+        sciq_issues.append(f"長い回答（>50文字）: {long_answers:,}件")
+        sciq_issues.append(f"平均回答長: {avg_answer_length:.0f}文字")
+
+    # 多肢選択問題の分析（distractorがある場合）
+    distractor_columns = [col for col in df.columns if 'distractor' in col.lower()]
+    if distractor_columns:
+        sciq_issues.append(f"✅ 多肢選択形式: {len(distractor_columns)}個の選択肢列が存在")
+
+        for col in distractor_columns:
+            non_empty = df[col].dropna().count()
+            sciq_issues.append(f"  - {col}: {non_empty:,}件のデータ")
+
+    # 補足説明の分析（supportがある場合）
+    support_col = None
     for col in df.columns:
-        if 'cot' in col.lower() or 'complex' in col.lower():
-            cot_col = col
+        if 'support' in col.lower():
+            support_col = col
             break
 
-    if cot_col is not None:
-        cot_count = df[cot_col].dropna().count()
-        cot_ratio = (cot_count / len(df)) * 100
-        medical_issues.append(f"推論過程（CoT）付き質問: {cot_count:,}件 ({cot_ratio:.1f}%)")
+    if support_col is not None:
+        support_count = df[support_col].dropna().count()
+        support_ratio = (support_count / len(df)) * 100
+        sciq_issues.append(f"補足説明付き質問: {support_count:,}件 ({support_ratio:.1f}%)")
 
-        if cot_count > 0:
-            cot_lengths = df[cot_col].dropna().astype(str).str.len()
-            avg_cot_length = cot_lengths.mean()
-            medical_issues.append(f"平均推論過程長: {avg_cot_length:.0f}文字")
+        if support_count > 0:
+            support_lengths = df[support_col].dropna().astype(str).str.len()
+            avg_support_length = support_lengths.mean()
+            sciq_issues.append(f"平均補足説明長: {avg_support_length:.0f}文字")
 
-    return medical_issues
+    return sciq_issues
 
 
 # ==================================================
@@ -98,7 +112,7 @@ def main():
     """メイン処理関数"""
 
     # データセットタイプの設定
-    DATASET_TYPE = "medical_qa"
+    DATASET_TYPE = "sciq_qa"
 
     # ページ設定（共通関数利用）
     setup_page_config(DATASET_TYPE)
@@ -112,7 +126,7 @@ def main():
     setup_sidebar_header(DATASET_TYPE)
 
     # モデル選択（共通関数利用）
-    selected_model = select_model(key="medical_model_selection")
+    selected_model = select_model(key="sciq_model_selection")
 
     # 選択されたモデル情報を表示（共通関数利用）
     show_model_info(selected_model)
@@ -132,17 +146,22 @@ def main():
         help="データの品質検証結果を表示"
     )
 
-    # 医療データ特有の設定
-    with st.sidebar.expander("🏥 医療データ設定", expanded=False):
-        preserve_medical_terms = st.checkbox(
-            "医療用語を保護",
-            value=True,
-            help="医療専門用語の過度な正規化を防ぐ"
+    # SciQデータ特有の設定
+    with st.sidebar.expander("🔬 SciQデータ設定", expanded=False):
+        include_distractors = st.checkbox(
+            "選択肢（distractor）を含める",
+            value=False,
+            help="不正解選択肢も結合テキストに含める"
         )
-        include_complex_cot = st.checkbox(
-            "推論過程を含める",
+        include_support = st.checkbox(
+            "補足説明（support）を含める",
             value=True,
-            help="Complex_CoT列の推論過程を結合テキストに含める"
+            help="補足説明を結合テキストに含める"
+        )
+        preserve_scientific_notation = st.checkbox(
+            "科学的記法を保護",
+            value=True,
+            help="数式や化学式の表記を保護"
         )
 
     # =================================================
@@ -161,9 +180,9 @@ def main():
     # ファイルアップロード
     st.subheader("📁 データファイルのアップロード")
     uploaded_file = st.file_uploader(
-        "医療QAデータのCSVファイルをアップロードしてください",
+        "SciQ（科学・技術QA）データのCSVファイルをアップロードしてください",
         type=['csv'],
-        help="Question, Complex_CoT, Response の3列を含むCSVファイル"
+        help="question, correct_answer の2列を含むCSVファイル（distractor, support列はオプション）"
     )
 
     if uploaded_file is not None:
@@ -223,11 +242,11 @@ def main():
                         st.info(issue)
 
                 with col2:
-                    # 医療データ特有の検証
-                    medical_issues = validate_medical_data_specific(df)
-                    if medical_issues:
-                        st.write("**医療データ特有の分析:**")
-                        for issue in medical_issues:
+                    # SciQデータ特有の検証
+                    sciq_issues = validate_sciq_data_specific(df)
+                    if sciq_issues:
+                        st.write("**SciQ（科学・技術QA）データ特有の分析:**")
+                        for issue in sciq_issues:
                             st.info(issue)
 
             # 前処理実行
@@ -266,30 +285,31 @@ def main():
                     # 選択されたモデルでのトークン使用量推定（共通関数利用）
                     estimate_token_usage(df_processed, selected_model)
 
-                    # 医療データ特有の後処理分析
+                    # SciQデータ特有の後処理分析
                     if 'Combined_Text' in df_processed.columns:
-                        st.subheader("🏥 医療データ特有の分析")
+                        st.subheader("🔬 SciQデータ特有の分析")
 
                         col1, col2 = st.columns(2)
 
                         with col1:
-                            # 結合テキストの医療用語分析
+                            # 結合テキストの科学用語分析
                             combined_texts = df_processed['Combined_Text']
-                            medical_keywords = ['症状', '診断', '治療', '薬', '病気', '疾患']
+                            science_keywords = ['化学', '物理', '生物', '数学', 'chemistry', 'physics', 'biology',
+                                                'math']
 
                             keyword_counts = {}
-                            for keyword in medical_keywords:
+                            for keyword in science_keywords:
                                 count = combined_texts.str.contains(keyword, case=False, na=False).sum()
                                 keyword_counts[keyword] = count
 
                             if keyword_counts:
-                                st.write("**医療関連用語の出現頻度:**")
+                                st.write("**科学・技術用語の出現頻度:**")
                                 for keyword, count in keyword_counts.items():
                                     percentage = (count / len(df_processed)) * 100
                                     st.write(f"- {keyword}: {count:,}件 ({percentage:.1f}%)")
 
                         with col2:
-                            # 質問の長さ分布
+                            # 質問の複雑度分析
                             question_col = None
                             for col in df_processed.columns:
                                 if 'question' in col.lower():
@@ -298,33 +318,55 @@ def main():
 
                             if question_col is not None:
                                 question_lengths = df_processed[question_col].str.len()
-                                st.write("**質問の長さ統計:**")
+                                st.write("**質問の複雑度統計:**")
                                 st.metric("平均質問長", f"{question_lengths.mean():.0f}文字")
                                 st.metric("最長質問", f"{question_lengths.max():,}文字")
                                 st.metric("最短質問", f"{question_lengths.min():,}文字")
 
-                        # 推論過程（CoT）の分析
-                        cot_col = None
+                        # 多肢選択問題の分析
+                        distractor_columns = [col for col in df_processed.columns if 'distractor' in col.lower()]
+                        if distractor_columns:
+                            st.write("**多肢選択問題の分析:**")
+                            col1, col2, col3 = st.columns(3)
+
+                            with col1:
+                                st.metric("選択肢数", len(distractor_columns))
+                            with col2:
+                                # 最も多くの選択肢を持つ問題数
+                                max_distractors = 0
+                                for col in distractor_columns:
+                                    non_empty = df_processed[col].dropna().count()
+                                    max_distractors = max(max_distractors, non_empty)
+                                st.metric("最大選択肢数", max_distractors)
+                            with col3:
+                                # 平均選択肢利用率
+                                total_distractors = sum(
+                                    df_processed[col].dropna().count() for col in distractor_columns)
+                                avg_usage = (total_distractors / (len(df_processed) * len(distractor_columns))) * 100
+                                st.metric("選択肢利用率", f"{avg_usage:.1f}%")
+
+                        # 補足説明の分析
+                        support_col = None
                         for col in df_processed.columns:
-                            if 'cot' in col.lower() or 'complex' in col.lower():
-                                cot_col = col
+                            if 'support' in col.lower():
+                                support_col = col
                                 break
 
-                        if cot_col is not None:
-                            st.write("**推論過程（CoT）の分析:**")
-                            cot_data = df_processed[cot_col].dropna()
-                            if len(cot_data) > 0:
-                                cot_lengths = cot_data.astype(str).str.len()
+                        if support_col is not None:
+                            st.write("**補足説明の分析:**")
+                            support_data = df_processed[support_col].dropna()
+                            if len(support_data) > 0:
+                                support_lengths = support_data.astype(str).str.len()
                                 col1, col2, col3 = st.columns(3)
                                 with col1:
-                                    st.metric("CoT平均長", f"{cot_lengths.mean():.0f}文字")
+                                    st.metric("平均説明長", f"{support_lengths.mean():.0f}文字")
                                 with col2:
-                                    st.metric("CoT最大長", f"{cot_lengths.max():,}文字")
+                                    st.metric("最大説明長", f"{support_lengths.max():,}文字")
                                 with col3:
-                                    cot_ratio = (len(cot_data) / len(df_processed)) * 100
-                                    st.metric("CoT含有率", f"{cot_ratio:.1f}%")
+                                    support_ratio = (len(support_data) / len(df_processed)) * 100
+                                    st.metric("説明含有率", f"{support_ratio:.1f}%")
 
-                    logger.info(f"医療QAデータ処理完了: {len(df):,} → {len(df_processed):,}行")
+                    logger.info(f"SciQ（科学・技術QA）データ処理完了: {len(df):,} → {len(df_processed):,}行")
 
                 except Exception as process_error:
                     st.error(f"❌ 前処理エラー: {str(process_error)}")
@@ -362,7 +404,7 @@ def main():
                         data=csv_data,
                         file_name=f"preprocessed_{DATASET_TYPE}_{len(df_processed)}rows.csv",
                         mime="text/csv",
-                        help="前処理済みの医療QAデータをCSV形式でダウンロード",
+                        help="前処理済みのSciQ（科学・技術QA）データをCSV形式でダウンロード",
                         use_container_width=True
                     )
 
@@ -371,7 +413,7 @@ def main():
                         st.download_button(
                             label="📝 テキスト形式でダウンロード",
                             data=text_data,
-                            file_name=f"medical_qa.txt",
+                            file_name=f"sciq_qa.txt",
                             mime="text/plain",
                             help="Vector Store/RAG用に最適化された結合テキスト",
                             use_container_width=True
@@ -447,25 +489,31 @@ def main():
         with st.expander("📄 必要なファイル形式", expanded=False):
             st.write("**CSVファイルの要件:**")
             st.write("- エンコーディング: UTF-8")
-            st.write("- 必須列: Question, Complex_CoT, Response")
+            st.write("- 必須列: question, correct_answer")
+            st.write("- オプション列: distractor1, distractor2, distractor3, support")
             st.write("- ファイル形式: .csv")
 
             st.write("**サンプルデータ例:**")
             sample_data = {
-                "Question": [
-                    "糖尿病の症状について教えてください",
-                    "高血圧の治療法は何ですか",
-                    "風邪の予防方法を知りたいです"
+                "question"      : [
+                    "What is the chemical symbol for water?",
+                    "Which planet is closest to the sun?",
+                    "What is the speed of light in vacuum?"
                 ],
-                "Complex_CoT": [
-                    "糖尿病は血糖値が慢性的に高い状態です。まず症状を確認し...",
-                    "高血圧は生活習慣病の一つで、治療には薬物療法と生活指導が...",
-                    "風邪の予防には免疫力向上と感染予防が重要です..."
+                "correct_answer": [
+                    "H2O",
+                    "Mercury",
+                    "299,792,458 meters per second"
                 ],
-                "Response": [
-                    "糖尿病の主な症状には、頻尿、多飲、多食、体重減少があります...",
-                    "高血圧の治療には、ACE阻害薬、利尿薬などの薬物療法と...",
-                    "風邪の予防には、手洗い、うがい、マスク着用が基本です..."
+                "distractor1"   : [
+                    "HO2",
+                    "Venus",
+                    "300,000,000 meters per second"
+                ],
+                "support"       : [
+                    "Water is a chemical compound consisting of two hydrogen atoms and one oxygen atom.",
+                    "Mercury is the smallest and innermost planet in the Solar System.",
+                    "The speed of light in vacuum is a universal physical constant."
                 ]
             }
             sample_df = pd.DataFrame(sample_data)
@@ -507,4 +555,4 @@ if __name__ == "__main__":
     main()
 
 # 実行コマンド:
-# streamlit run a30_013_make_rag_data_medical.py --server.port=8503
+# streamlit run a014_make_rag_data_sciq.py --server.port=8504
