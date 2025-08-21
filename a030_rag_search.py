@@ -159,7 +159,7 @@ class VectorStoreManager:
 
         try:
             # OpenAI APIからVector Store一覧を取得
-            stores_response = self.openai_client.beta.vector_stores.list()
+            stores_response = self.openai_client.vector_stores.list()
 
             # Vector Storeを作成日時でソート（新しい順）
             sorted_stores = sorted(

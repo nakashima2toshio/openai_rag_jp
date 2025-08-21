@@ -1,7 +1,0 @@
-
-qdrant-client
-openai>=1.0.0
-pandas
-pyyaml
-streamlit
-python-dotenv

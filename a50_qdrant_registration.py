@@ -1,8 +1,9 @@
+# python a50_qdrant_registration.py --recreate --include-answer
 
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-a50_qdrant.py — helper群・config.yml連携版（単一コレクション＋domain、Named Vectors対応、answer同梱切替）
+a50_qdrant_registration.py — helper群・config.yml連携版（単一コレクション＋domain、Named Vectors対応、answer同梱切替）
 --------------------------------------------------------------------------------
 - 4つのCSV（customer_support_faq.csv, medical_qa.csv, legal_qa.csv, sciq_qa.csv）を単一コレクションに統合
 - payloadに domain を付与し、フィルタ検索が可能
@@ -14,8 +15,8 @@ a50_qdrant.py — helper群・config.yml連携版（単一コレクション＋d
 使い方：
   export OPENAI_API_KEY=sk-...
   docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
-  python a50_qdrant.py --recreate
-  python a50_qdrant.py --search "副作用はありますか？" --domain medical --using primary
+  python a50_qdrant_registration.py --recreate
+  python a50_qdrant_registration.py --search "副作用はありますか？" --domain medical --using primary
 
 主要引数：
   --recreate           : コレクション削除→新規作成
@@ -31,7 +32,7 @@ a50_qdrant.py — helper群・config.yml連携版（単一コレクション＋d
 """
 import argparse
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Tuple, Optional, Any
 
 import pandas as pd
@@ -69,10 +70,10 @@ DEFAULTS = {
         # "bge": {"provider": "openai", "model": "text-embedding-3-large", "dims": 3072},
     },
     "paths": {
-        "customer": "/mnt/data/customer_support_faq.csv",
-        "medical":  "/mnt/data/medical_qa.csv",
-        "legal":    "/mnt/data/legal_qa.csv",
-        "sciq":     "/mnt/data/sciq_qa.csv",
+        "customer": "OUTPUT/preprocessed_customer_support_faq_89rows_20250721_092004.csv",
+        "medical":  "OUTPUT/preprocessed_medical_qa_19704rows_20250721_092658.csv",
+        "legal":    "OUTPUT/preprocessed_legal_qa_4rows_20250721_100302.csv",
+        "sciq":     "OUTPUT/preprocessed_sciq_qa_11679rows_20250721_095451.csv",
     },
     "qdrant": {"url": "http://localhost:6333"},
 }
@@ -139,6 +140,13 @@ def load_csv(path: str, required=("question", "answer"), limit: int = 0) -> pd.D
         raise FileNotFoundError(f"CSV not found: {path}")
     df = pd.read_csv(path)
     # 列名マッピングが必要ならここで調整（例: 'Question'->'question'）
+    column_mappings = {
+        'Question': 'question',
+        'Response': 'answer',
+        'Answer': 'answer',
+        'correct_answer': 'answer'
+    }
+    df = df.rename(columns=column_mappings)
     for col in required:
         if col not in df.columns:
             raise ValueError(f"{path} には '{col}' 列が必要です（列: {list(df.columns)}）")
@@ -183,7 +191,7 @@ def build_points(df: pd.DataFrame, vectors_by_name: Dict[str, List[List[float]]]
     for name, vecs in vectors_by_name.items():
         if len(vecs) != n:
             raise ValueError(f"vectors length mismatch for '{name}': df={n}, vecs={len(vecs)}")
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     points: List[models.PointStruct] = []
     for i, row in enumerate(df.itertuples(index=False)):
         payload = {
@@ -194,7 +202,8 @@ def build_points(df: pd.DataFrame, vectors_by_name: Dict[str, List[List[float]]]
             "created_at": now_iso,
             "schema": "qa:v1",
         }
-        pid = f"{domain}-{i}"
+        # Qdrant requires point IDs to be UUID or unsigned integer
+        pid = hash(f"{domain}-{i}") & 0x7FFFFFFF  # Convert to positive 32-bit integer
         if len(vectors_by_name) == 1:
             # 単一ベクトル
             vec = list(vectors_by_name.values())[0][i]
@@ -239,7 +248,7 @@ def main():
     ap.add_argument("--recreate", action="store_true", help="Drop & create collection before upsert.")
     ap.add_argument("--collection", default=rag_cfg.get("collection", "qa_corpus"))
     ap.add_argument("--qdrant-url", default=qdrant_url)
-    ap.add_argument("--batch-size", type=int, default=128)
+    ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--limit", type=int, default=0, help="Row limit per CSV for development (0=all)")
     ap.add_argument("--include-answer", action="store_true",
                     default=rag_cfg.get("include_answer_in_embedding", False),
@@ -257,8 +266,8 @@ def main():
     using_default = list(embeddings_cfg.keys())[0]
     using_vec = args.using or using_default
 
-    # Qdrant
-    client = QdrantClient(url=args.qdrant_url)
+    # Qdrant with timeout configuration
+    client = QdrantClient(url=args.qdrant_url, timeout=300)
     create_or_recreate_collection(client, args.collection, recreate=args.recreate, embeddings_cfg=embeddings_cfg)
 
     # 検索のみ
