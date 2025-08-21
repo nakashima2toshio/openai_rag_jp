@@ -451,88 +451,38 @@ class ModernRAGManager:
 
     def search_with_responses_api(self, query: str, store_name: str, store_id: str, **kwargs) -> Tuple[
         str, Dict[str, Any]]:
-        """Chat Completions API + file_search ツールを使用した検索"""
+        """Responses API + file_search ツールを使用した検索"""
         try:
             # file_search ツールの設定
             file_search_tool = {
                 "type": "file_search",
-                "file_search": {
-                    "max_num_results": kwargs.get('max_results', 20)
-                }
+                "vector_store_ids": [store_id]
             }
 
             # 選択されたモデルを取得
             selected_model = kwargs.get('model', 'gpt-4o-mini')
             
-            # Assistant作成（一時的）
-            assistant = openai_client.beta.assistants.create(
-                name=f"RAG_Assistant_{store_name.replace(' ', '_')}",
-                instructions=f"You are a helpful assistant specializing in {store_name}. Search through the vector store to find relevant information and provide accurate, helpful responses.",
+            # Responses API を使用した検索
+            response = openai_client.responses.create(
                 model=selected_model,
-                tools=[file_search_tool],
-                tool_resources={
-                    "file_search": {
-                        "vector_store_ids": [store_id]
-                    }
-                }
+                instructions=f"You are a helpful assistant specializing in {store_name}. Search through the vector store to find relevant information and provide accurate, helpful responses.",
+                input=query,
+                tools=[file_search_tool]
             )
 
-            # Thread作成
-            thread = openai_client.beta.threads.create()
-
-            # メッセージ追加
-            openai_client.beta.threads.messages.create(
-                thread_id=thread.id,
-                role="user",
-                content=query
-            )
-
-            # Run実行
-            run = openai_client.beta.threads.runs.create(
-                thread_id=thread.id,
-                assistant_id=assistant.id
-            )
-
-            # Run完了まで待機
-            import time
-            while run.status in ['queued', 'in_progress', 'cancelling']:
-                time.sleep(1)
-                run = openai_client.beta.threads.runs.retrieve(
-                    thread_id=thread.id,
-                    run_id=run.id
-                )
-
-            # メッセージ取得
-            messages = openai_client.beta.threads.messages.list(
-                thread_id=thread.id
-            )
-
-            # 最新のアシスタントメッセージを取得
-            response_text = "回答を取得できませんでした"
+            # レスポンスの取得
+            response_text = response.output_text if hasattr(response, 'output_text') else response.content
             citations = []
             
-            for message in messages.data:
-                if message.role == "assistant":
-                    for content_block in message.content:
-                        if content_block.type == "text":
-                            response_text = content_block.text.value
-                            # ファイル引用の抽出
-                            if hasattr(content_block.text, 'annotations'):
-                                for annotation in content_block.text.annotations:
-                                    if annotation.type == "file_citation":
-                                        citations.append({
-                                            "file_id": annotation.file_citation.file_id,
-                                            "filename": annotation.file_citation.quote if hasattr(annotation.file_citation, 'quote') else 'Unknown file',
-                                            "index": len(citations)
-                                        })
-                    break
-
-            # リソースクリーンアップ
-            try:
-                openai_client.beta.assistants.delete(assistant.id)
-                openai_client.beta.threads.delete(thread.id)
-            except Exception as cleanup_error:
-                logger.warning(f"リソースクリーンアップエラー: {cleanup_error}")
+            # ファイル引用の抽出（可能な場合）
+            if hasattr(response, 'annotations'):
+                for annotation in response.annotations:
+                    if annotation.type == "file_citation":
+                        citations.append({
+                            "file_id": annotation.file_citation.file_id,
+                            "filename": annotation.file_citation.quote if hasattr(annotation.file_citation, 'quote') else 'Unknown file',
+                            "index": len(citations)
+                        })
 
             # メタデータの構築
             metadata: Dict[str, Any] = {
@@ -541,27 +491,26 @@ class ModernRAGManager:
                 "query"     : query,
                 "timestamp" : datetime.now().isoformat(),
                 "model"     : selected_model,
-                "method"    : "chat_completions_file_search",
-                "citations" : citations,
-                "run_status": run.status
+                "method"    : "responses_api_file_search",
+                "citations" : citations
             }
 
             # 使用統計があれば追加
-            if hasattr(run, 'usage') and run.usage is not None:
+            if hasattr(response, 'usage') and response.usage is not None:
                 try:
-                    if hasattr(run.usage, 'model_dump'):
-                        metadata["usage"] = run.usage.model_dump()
-                    elif hasattr(run.usage, 'dict'):
-                        metadata["usage"] = run.usage.dict()
+                    if hasattr(response.usage, 'model_dump'):
+                        metadata["usage"] = response.usage.model_dump()
+                    elif hasattr(response.usage, 'dict'):
+                        metadata["usage"] = response.usage.dict()
                     else:
                         usage_dict = {}
                         for attr in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
-                            if hasattr(run.usage, attr):
-                                usage_dict[attr] = getattr(run.usage, attr)
+                            if hasattr(response.usage, attr):
+                                usage_dict[attr] = getattr(response.usage, attr)
                         metadata["usage"] = usage_dict
                 except Exception as e:
                     logger.warning(f"使用統計の変換に失敗: {e}")
-                    metadata["usage"] = str(run.usage)
+                    metadata["usage"] = str(response.usage)
 
             return response_text, metadata
 
@@ -845,7 +794,7 @@ def display_test_questions():
     if selected_language == "日本語":
         st.warning("⚠️ RAGデータは英語で作成されています。英語での質問をお勧めします。")
     else:
-        st.success("✅ 英語質問（RAGデータに最適化）")
+        st.success("✅ 英語質問（日本語でも可）")
 
     if not questions:
         if selected_language == "English":
@@ -1171,180 +1120,175 @@ def main():
         display_system_info()
 
     # メインコンテンツ
-    col1, col2 = st.columns([1, 1])
+    st.header("❓ 質問入力")
 
-    with col1:
-        st.header("❓ 質問入力")
+    # 質問入力フォーム
+    with st.form("search_form"):
+        query = st.text_area(
+            "質問を入力してください",
+            value=st.session_state.current_query,
+            height=100,
+            key="query_input",
+            help="英語での質問がRAGデータに最適化されています"
+        )
 
-        # 質問入力フォーム
-        with st.form("search_form"):
-            query = st.text_area(
-                "質問を入力してください",
-                value=st.session_state.current_query,
-                height=100,
-                key="query_input",
-                help="英語での質問がRAGデータに最適化されています"
+        submitted = st.form_submit_button("🔍 検索実行", type="primary")
+
+    if submitted and query.strip():
+        st.session_state.current_query = query
+
+        # 検索実行
+        st.header("🤖 検索結果")
+
+        with st.spinner("🔍 Vector Store検索中..."):
+            # 選択されたVector StoreのIDを取得
+            selected_store_id = vector_stores.get(selected_store, "")
+            if not selected_store_id:
+                st.error(f"❌ Vector Store ID が見つかりません: {selected_store}")
+                return
+
+            # 検索オプションの取得
+            search_options = st.session_state.search_options
+
+            # 検索実行（store_idも渡す）
+            final_result, final_metadata = rag_manager.search(
+                query,
+                selected_store,
+                selected_store_id,
+                use_agent_sdk=st.session_state.use_agent_sdk,
+                max_results=search_options['max_results'],
+                include_results=search_options['include_results'],
+                model=st.session_state.selected_model
             )
 
-            submitted = st.form_submit_button("🔍 検索実行", type="primary")
+        # 結果表示
+        display_search_results(final_result, final_metadata)
 
-        if submitted and query.strip():
-            st.session_state.current_query = query
+        # 検索履歴に追加（型安全）
+        history_item: Dict[str, Any] = {
+            "query"         : query,
+            "store_name"    : selected_store,
+            "store_id"      : selected_store_id,
+            "timestamp"     : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "method"        : final_metadata.get('method', 'unknown'),
+            "citations"     : final_metadata.get('citations', []),
+            "result_preview": final_result[:200] + "..." if len(final_result) > 200 else final_result
+        }
 
-            # 検索実行
-            with col2:
-                st.header("🤖 検索結果")
+        # 重複チェック
+        if not any(item['query'] == query and item['store_name'] == selected_store
+                   for item in st.session_state.search_history):
+            st.session_state.search_history.insert(0, history_item)
+            st.session_state.search_history = st.session_state.search_history[:50]  # 最新50件保持
 
-                with st.spinner("🔍 Vector Store検索中..."):
-                    # 選択されたVector StoreのIDを取得
-                    selected_store_id = vector_stores.get(selected_store, "")
-                    if not selected_store_id:
-                        st.error(f"❌ Vector Store ID が見つかりません: {selected_store}")
-                        return
+    elif submitted and not query.strip():
+        st.error("質問を入力してください")
 
-                    # 検索オプションの取得
-                    search_options = st.session_state.search_options
+    elif not st.session_state.current_query:
+        st.header("🤖 検索結果")
+        st.info("質問を入力して検索を実行してください")
 
-                    # 検索実行（store_idも渡す）
-                    final_result, final_metadata = rag_manager.search(
-                        query,
-                        selected_store,
-                        selected_store_id,
-                        use_agent_sdk=st.session_state.use_agent_sdk,
-                        max_results=search_options['max_results'],
-                        include_results=search_options['include_results'],
-                        model=st.session_state.selected_model
-                    )
+        # API機能説明
+        st.markdown("### 🚀 利用可能な機能")
+        st.markdown("""
+        - **最新Responses API**: OpenAIの最新API
+        - **file_search ツール**: Vector Storeからの高精度検索
+        - **動的Vector Store管理**: 自動ID更新・設定ファイル連携
+        - **重複ID解決**: 同名Vector Storeの最新作成日時優先
+        - **ファイル引用**: 検索結果の出典表示
+        - **カスタマイズ可能**: 結果数、フィルタリング等
+        - **Agent SDK連携**: セッション管理（オプション）
+        - **型安全実装**: 型エラー修正済み
+        - **環境変数APIキー**: セキュアな設定方法
+        """)
 
-                # 結果表示
-                display_search_results(final_result, final_metadata)
-
-                # 検索履歴に追加（型安全）
-                history_item: Dict[str, Any] = {
-                    "query"         : query,
-                    "store_name"    : selected_store,
-                    "store_id"      : selected_store_id,
-                    "timestamp"     : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "method"        : final_metadata.get('method', 'unknown'),
-                    "citations"     : final_metadata.get('citations', []),
-                    "result_preview": final_result[:200] + "..." if len(final_result) > 200 else final_result
-                }
-
-                # 重複チェック
-                if not any(item['query'] == query and item['store_name'] == selected_store
-                           for item in st.session_state.search_history):
-                    st.session_state.search_history.insert(0, history_item)
-                    st.session_state.search_history = st.session_state.search_history[:50]  # 最新50件保持
-
-        elif submitted and not query.strip():
-            st.error("質問を入力してください")
-
-    with col2:
-        if not st.session_state.current_query:
-            st.header("🤖 検索結果")
-            st.info("質問を入力して検索を実行してください")
-
-            # API機能説明
-            st.markdown("### 🚀 利用可能な機能")
+        # 重複問題修正の説明
+        with st.expander("🔄 重複ID問題修正について", expanded=False):
             st.markdown("""
-            - **最新Responses API**: OpenAIの最新API
-            - **file_search ツール**: Vector Storeからの高精度検索
-            - **動的Vector Store管理**: 自動ID更新・設定ファイル連携
-            - **重複ID解決**: 同名Vector Storeの最新作成日時優先
-            - **ファイル引用**: 検索結果の出典表示
-            - **カスタマイズ可能**: 結果数、フィルタリング等
-            - **Agent SDK連携**: セッション管理（オプション）
-            - **型安全実装**: 型エラー修正済み
-            - **環境変数APIキー**: セキュアな設定方法
+            **修正内容: 同名Vector Storeの重複問題解決**
+
+            **問題:**
+            - 同じ名前で複数のVector Storeが存在
+            - 古いIDが選択されるバグ
+            - 作成日時での優先度が未実装
+
+            **修正:**
+            - **作成日時ソート**: Vector Store一覧を作成日時順（新しい順）でソート
+            - **最新優先選択**: 同名の場合は`created_at`が最新のものを優先
+            - **詳細ログ出力**: どのIDが選択されたかをログで確認可能
+            - **デバッグ機能**: サイドバーで詳細情報を確認可能
+
+            **選択ロジック:**
+            1. OpenAI APIからVector Store一覧を取得
+            2. 作成日時(`created_at`)で降順ソート
+            3. 同名Store候補の中から最新を選択
+            4. 設定ファイルに保存・キャッシュ
+
+            **確認方法:**
+            - サイドバー「Vector Store管理」→「デバッグ情報表示」
+            - ログでどのIDが選択されたかを確認
             """)
 
-            # 重複問題修正の説明
-            with st.expander("🔄 重複ID問題修正について", expanded=False):
-                st.markdown("""
-                **修正内容: 同名Vector Storeの重複問題解決**
+        # Vector Store動的管理の説明
+        with st.expander("🗄️ 動的Vector Store管理について", expanded=False):
+            st.markdown("""
+            **新機能: 動的Vector Store管理**
 
-                **問題:**
-                - 同じ名前で複数のVector Storeが存在
-                - 古いIDが選択されるバグ
-                - 作成日時での優先度が未実装
+            - **自動更新**: OpenAI APIから最新のVector Store一覧を取得
+            - **設定ファイル連携**: `vector_stores.json` で永続化
+            - **a020_make_vsid.py 連携**: 新規作成されたVector Storeを自動認識
+            - **フォールバック**: 設定ファイルがない場合はデフォルト値を使用
 
-                **修正:**
-                - **作成日時ソート**: Vector Store一覧を作成日時順（新しい順）でソート
-                - **最新優先選択**: 同名の場合は`created_at`が最新のものを優先
-                - **詳細ログ出力**: どのIDが選択されたかをログで確認可能
-                - **デバッグ機能**: サイドバーで詳細情報を確認可能
+            **設定ファイル形式:**
+            ```json
+            {
+              "vector_stores": {
+                "Customer Support FAQ": "vs_xxx...",
+                "Medical Q&A": "vs_yyy...",
+                ...
+              },
+              "last_updated": "2025-01-XX...",
+              "source": "a030_rag_search.py",
+              "version": "1.1"
+            }
+            ```
 
-                **選択ロジック:**
-                1. OpenAI APIからVector Store一覧を取得
-                2. 作成日時(`created_at`)で降順ソート
-                3. 同名Store候補の中から最新を選択
-                4. 設定ファイルに保存・キャッシュ
+            **更新方法:**
+            1. サイドバーの「Vector Store管理」で「最新情報に更新」をクリック
+            2. 自動でOpenAI APIから最新一覧を取得（重複解決済み）
+            3. 設定ファイルに保存して永続化
+            """)
 
-                **確認方法:**
-                - サイドバー「Vector Store管理」→「デバッグ情報表示」
-                - ログでどのIDが選択されたかを確認
-                """)
+        # トラブルシューティング
+        with st.expander("🚨 トラブルシューティング", expanded=False):
+            st.markdown("""
+            **重複ID問題の場合:**
+            - サイドバー「Vector Store管理」→「最新情報に更新」をクリック
+            - 「デバッグ情報表示」で選択されたIDを確認
+            - ログで最新作成日時のIDが選択されているかを確認
 
-            # Vector Store動的管理の説明
-            with st.expander("🗄️ 動的Vector Store管理について", expanded=False):
-                st.markdown("""
-                **新機能: 動的Vector Store管理**
+            **APIキーエラーの場合:**
+            ```bash
+            # 環境変数確認
+            echo $OPENAI_API_KEY
 
-                - **自動更新**: OpenAI APIから最新のVector Store一覧を取得
-                - **設定ファイル連携**: `vector_stores.json` で永続化
-                - **a020_make_vsid.py 連携**: 新規作成されたVector Storeを自動認識
-                - **フォールバック**: 設定ファイルがない場合はデフォルト値を使用
+            # 設定方法
+            export OPENAI_API_KEY='your-api-key-here'
 
-                **設定ファイル形式:**
-                ```json
-                {
-                  "vector_stores": {
-                    "Customer Support FAQ": "vs_xxx...",
-                    "Medical Q&A": "vs_yyy...",
-                    ...
-                  },
-                  "last_updated": "2025-01-XX...",
-                  "source": "a030_rag_search.py",
-                  "version": "1.1"
-                }
-                ```
+            # 永続化（.bashrc/.zshrcに追加）
+            echo 'export OPENAI_API_KEY="your-api-key-here"' >> ~/.bashrc
+            ```
 
-                **更新方法:**
-                1. サイドバーの「Vector Store管理」で「最新情報に更新」をクリック
-                2. 自動でOpenAI APIから最新一覧を取得（重複解決済み）
-                3. 設定ファイルに保存して永続化
-                """)
+            **Vector Store関連エラー:**
+            - Vector Store IDが正しいか確認
+            - 「最新情報に更新」ボタンで再取得
+            - a020_make_vsid.py で新規作成後は更新が必要
 
-            # トラブルシューティング
-            with st.expander("🚨 トラブルシューティング", expanded=False):
-                st.markdown("""
-                **重複ID問題の場合:**
-                - サイドバー「Vector Store管理」→「最新情報に更新」をクリック
-                - 「デバッグ情報表示」で選択されたIDを確認
-                - ログで最新作成日時のIDが選択されているかを確認
-
-                **APIキーエラーの場合:**
-                ```bash
-                # 環境変数確認
-                echo $OPENAI_API_KEY
-
-                # 設定方法
-                export OPENAI_API_KEY='your-api-key-here'
-
-                # 永続化（.bashrc/.zshrcに追加）
-                echo 'export OPENAI_API_KEY="your-api-key-here"' >> ~/.bashrc
-                ```
-
-                **Vector Store関連エラー:**
-                - Vector Store IDが正しいか確認
-                - 「最新情報に更新」ボタンで再取得
-                - a020_make_vsid.py で新規作成後は更新が必要
-
-                **その他のエラー:**
-                - OpenAI SDKが最新版か確認: `pip install --upgrade openai`
-                - インターネット接続を確認
-                - vector_stores.json ファイルの形式を確認
-                """)
+            **その他のエラー:**
+            - OpenAI SDKが最新版か確認: `pip install --upgrade openai`
+            - インターネット接続を確認
+            - vector_stores.json ファイルの形式を確認
+            """)
 
     # 検索履歴セクション
     st.markdown("---")
