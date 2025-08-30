@@ -1,6 +1,6 @@
-# a020_make_vsid.py
+# a02_make_vsid.py
 # Vector Store作成Streamlitアプリ（完全修正版）
-# streamlit run a020_make_vsid.py --server.port=8502
+# streamlit run a02_make_vsid.py --server.port=8502
 
 import streamlit as st
 import pandas as pd
@@ -1060,4 +1060,4 @@ if __name__ == "__main__":
     main()
 
 # 実行コマンド:
-# streamlit run a020_make_vsid.py --server.port=8502
+# streamlit run a02_make_vsid.py --server.port=8502
