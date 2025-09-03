@@ -1,11 +1,20 @@
+## はじめに
+
+### 開発環境の準備
+
+[README_preparation.md](./doc/README_preparation.md) を参照してください。
+
+### README_2.md - 利用手順と目的別サンプルプログラムの使い方
+
+[README_2.md](./doc/README_2.md)　を参照してください。
+
+
 ## RAG（Cloud版：OpenAI Embedding)
 
 OpenAIのVector StoreとResponses APIを活用したクラウドベースRAG（Retrieval-Augmented Generation）システム。
 Vector Storeの自動作成・管理からfile_search機能を使った高精度検索まで、完全統合されたRAGワークフローを提供する。
 
 [a00_cloud_rag.md](./doc/a00_cloud_rag.md)
-
-[](https://)
 
 ## RAG（Local版：OpenAI-Embedding + Qdrant: Hybrid Search)
 
@@ -16,7 +25,8 @@ Qdrantベクトルデータベースを使用したRAG（Retrieval-Augmented Gen
 
 （＊）ドキュメントは、プログラムと同名.md の資料が doc/ に配置している。
 
- ### プログラム一覧：
+### プログラム一覧：
+
 
 | 順番 | プログラム名                       | 概要                                                                                                                                                 |
 | ---- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
