@@ -1,5 +1,5 @@
-# OpenAI API from Scratch + streamlit
-## スクラッチで OpenAI API + Streamlit
+# RAG(Cloud or Local) from Scratch + streamlit
+## スクラッチで RAG(Cloud or Local) + Streamlit
 
 #### 開発環境の準備
 （1）このレポジトリーをクローン
