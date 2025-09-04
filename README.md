@@ -1,4 +1,5 @@
-## はじめに
+# OpenAI API from Scratch + streamlit
+## スクラッチで OpenAI API + Streamlit
 
 #### 開発環境の準備
 （1）このレポジトリーをクローン
