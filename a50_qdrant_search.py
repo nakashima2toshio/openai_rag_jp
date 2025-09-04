@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
@@ -112,31 +111,60 @@ query = st.text_input("Enter your query", value=st.session_state['selected_query
 do_search = st.button("Search")
 
 if do_search and query.strip():
-    client = QdrantClient(url=qdrant_url)
-    qvec = embed_query(query, model_for_using)
-    qfilter = None
-    if domain != "ALL":
-        qfilter = models.Filter(must=[models.FieldCondition(key="domain", match=models.MatchValue(value=domain))])
-    # Since collection uses single vector configuration (not named vectors), 
-    # use qvec directly without vector name
-    hits = client.search(collection_name=collection, query_vector=qvec, limit=topk,
-                         query_filter=qfilter)
-    rows = []
-    for h in hits:
-        rows.append({
-            "score": h.score,
-            "domain": h.payload.get("domain"),
-            "question": h.payload.get("question"),
-            "answer": h.payload.get("answer"),
-            "source": h.payload.get("source"),
-        })
-    st.subheader("Results")
-    st.dataframe(pd.DataFrame(rows))
-    
-    # Display the highest score result
-    if rows:
-        best_result = max(rows, key=lambda x: x["score"])
-        st.subheader("🏆 Highest Score Result")
-        st.write(f"**Score:** {best_result['score']:.4f}")
-        st.write(f"**Question:** {best_result['question']}")
-        st.write(f"**Answer:** {best_result['answer']}")
+    try:
+        client = QdrantClient(url=qdrant_url)
+        # Test connection
+        try:
+            client.get_collections()
+        except Exception as conn_err:
+            st.error(f"❌ Qdrantサーバーに接続できません: {qdrant_url}")
+            st.error("以下を確認してください:")
+            st.error("1. Qdrantサーバーが起動しているか確認: `docker ps` または `qdrant` コマンド")
+            st.error("2. URLが正しいか確認 (デフォルト: http://localhost:6333)")
+            st.error(f"エラー詳細: {str(conn_err)}")
+            st.stop()
+        
+        qvec = embed_query(query, model_for_using)
+        qfilter = None
+        if domain != "ALL":
+            qfilter = models.Filter(must=[models.FieldCondition(key="domain", match=models.MatchValue(value=domain))])
+        # Since collection uses single vector configuration (not named vectors), 
+        # use qvec directly without vector name
+        hits = client.search(collection_name=collection, query_vector=qvec, limit=topk,
+                             query_filter=qfilter)
+        rows = []
+        for h in hits:
+            rows.append({
+                "score": h.score,
+                "domain": h.payload.get("domain"),
+                "question": h.payload.get("question"),
+                "answer": h.payload.get("answer"),
+                "source": h.payload.get("source"),
+            })
+        st.subheader("Results")
+        st.dataframe(pd.DataFrame(rows))
+        
+        # Display the highest score result
+        if rows:
+            best_result = max(rows, key=lambda x: x["score"])
+            st.subheader("🏆 Highest Score Result")
+            st.write(f"**Score:** {best_result['score']:.4f}")
+            st.write(f"**Question:** {best_result['question']}")
+            st.write(f"**Answer:** {best_result['answer']}")
+    except ConnectionRefusedError:
+        st.error(f"❌ Qdrantサーバーへの接続が拒否されました: {qdrant_url}")
+        st.error("Qdrantサーバーが起動していることを確認してください:")
+        st.code("docker run -p 6333:6333 qdrant/qdrant", language="bash")
+    except Exception as e:
+        if "Connection refused" in str(e):
+            st.error(f"❌ Qdrantサーバーに接続できません: {qdrant_url}")
+            st.error("Qdrantサーバーが起動していることを確認してください:")
+            st.code("docker run -p 6333:6333 qdrant/qdrant", language="bash")
+        elif "collection" in str(e).lower() and "not found" in str(e).lower():
+            st.error(f"❌ コレクション '{collection}' が見つかりません")
+            st.error("先に a50_qdrant_registration.py を実行してデータを登録してください:")
+            st.code("python a50_qdrant_registration.py", language="bash")
+        else:
+            st.error(f"❌ エラーが発生しました: {str(e)}")
+            st.error("エラーの詳細:")
+            st.exception(e)
