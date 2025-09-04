@@ -1,50 +1,80 @@
 ## はじめに
 
-### 開発環境の準備
+#### 開発環境の準備
+（1）このレポジトリーをクローン
+（2）Pythonをインストール
+（3）[仮想環境を作成]
+- python3 -m venv .venv
+- [同上を有効化] source .venv/bin/activate
+- ライブラリーをインストールする：pip install -r requirements.txt
 
-[README_preparation.md](./doc/README_preparation.md) を参照してください。
+(4) docker Desktopを起動
+- このディレクトリーから移動し (see. docker-compose/memo.txt)docker-compose.mcp-demo.ymlを起動する。
+    cd docker-compose/
+    [Stop] docker-compose -f docker-compose.mcp-demo.yml down
+    [Start] docker-compose -f docker-compose.mcp-demo.yml up -d
 
-### README_2.md - 利用手順と目的別サンプルプログラムの使い方
+(5) プロジェクトルートで、セットアップ、サーバー起動、データの投入を実行する。
+- エラーがあったら、エラーの原因を特定し、修正し、再実行する。
+python setup.py
+python server.py
+python data.py
 
-[README_2.md](./doc/README_2.md)　を参照してください。
 
+[README_preparation.md](./README_preparation.md) を参照してください。
+
+##### (参考)この検証、開発環境：
+
+- 開発マシン: Macbook M2 メモリ：24Gバイト
+- IDE(開発環境）：PyCharm Professional
+- AI: OpenAI(ChatGPT proプラン、API：Tier3)
+  - OpenAIにだけあるAPIを利用の場合に利用（Embedding, Speech & Textなど）
+- AI: Anthropic claude code(Maxプラン）、API:Tier2 ・・・ほぼ、主力
+
+#### README_2.md - 利用手順と目的別サンプルプログラムの使い方
+
+[README_2.md](./README_2.md)　を参照してください。
 
 ## RAG（Cloud版：OpenAI Embedding)
 
-OpenAIのVector StoreとResponses APIを活用したクラウドベースRAG（Retrieval-Augmented Generation）システム。
-Vector Storeの自動作成・管理からfile_search機能を使った高精度検索まで、完全統合されたRAGワークフローを提供する。
-
-[a00_cloud_rag.md](./doc/a00_cloud_rag.md)
+- OpenAIのVector StoreとResponses APIを活用したクラウドベースRAG
+- (Retrieval-Augmented Generation）システム。
+- Vector Storeの自動作成・管理からfile_search機能を使った高精度検索まで、
+- 完全統合されたRAGワークフローを提供する。
 
 ## RAG（Local版：OpenAI-Embedding + Qdrant: Hybrid Search)
 
-Qdrantベクトルデータベースを使用したRAG（Retrieval-Augmented Generation）システム。
-4つのドメイン（customer、medical、legal、sciq）のQAデータを統合管理し、多言語での意味的検索とStreamlit WebUIを提供する。
-
-[a50_qdrant.md](./doc/a50_qdrant.md)
+- Qdrantベクトルデータベースを使用したRAG（Retrieval-Augmented Generation）システム。
+- 4つのドメイン（customer、medical、legal、sciq）のQAデータを統合管理し、
+- 多言語での意味的検索とStreamlit WebUIを提供する。
 
 （＊）ドキュメントは、プログラムと同名.md の資料が doc/ に配置している。
 
-### プログラム一覧：
+## プログラム一覧：
+
+（注）あらかじめ、サーバーの起動を、docker-compose/docker-compose.mcp-demo.yml すること。
+
+- 起動サービスは：redis, PostgreSQL, Qdrant, elasticsearch)
+- 起動メモは：docker-compose/memo.txt を参照してください。
 
 
 | 順番 | プログラム名                       | 概要                                                                                                                                                 |
 | ---- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | setup.py                           | MCP環境セットアップスクリプト。Python環境チェック、必要パッケージ自動インストール（streamlit、openai、qdrant-client等）、環境構築の自動化            |
-| 1    | helper_api.py                      | OpenAI API関連のコア機能。ConfigManager、APIクライアント管理、ログ設定、Responses API型定義、トークン計算、エラーハンドリング等の共通基盤機能        |
-| 2    | helper_rag.py                      | RAGデータ前処理の共通機能モジュール。AppConfig（モデル設定・料金情報）、データ検証、データセット読み込み、前処理、統計表示、ファイル保存等の汎用機能 |
-| 3    | helper_st.py                       | Streamlit関連のヘルパー機能モジュール。Streamlit UI部品の共通機能を提供                                                                              |
-| 4    | a00_dl_dataset_from_huggingface.py | HuggingFaceからRAG用データセットを一括ダウンロード。カスタマーサポート、医療、科学技術、法律、トリビアの5つのデータセットをCSVファイルとして保存     |
-| 5    | a011_make_rag_data_customer.py     | カスタマーサポートFAQデータ専用のRAG前処理Streamlitアプリ。問題・解決・サポート関連用語の検証機能でデータを質問・回答形式に変換                      |
-| 6    | a013_make_rag_data_medical.py      | 医療QAデータ専用のRAG前処理Streamlitアプリ。症状・診断・治療・薬等の医療関連用語検証機能で医療質問データをRAG用に最適化                              |
-| 7    | a014_make_rag_data_sciq.py         | 科学・技術QAデータ専用のRAG前処理Streamlitアプリ。化学・物理・生物・数学等の科学技術関連用語検証機能でSciQデータセットをRAG検索用に変換              |
-| 8    | a015_make_rag_data_legal.py        | 法律・判例QAデータ専用のRAG前処理Streamlitアプリ。法律・条文・判例・裁判等の法律関連用語検証機能でリーガルベンチデータをRAG用に最適化                |
-| 9A   | a02_make_vsid.py                   | OpenAI Vector Store作成用Streamlitアプリ。前処理済みテキストからVector Storeを作成し、vector_stores.jsonに管理情報を保存。重複対応・最新優先選択機能 |
-| 10A  | a03_rag_search.py                  | OpenAI Responses API使用のRAG検索Streamlitアプリ。file_searchツールでVector Store検索を実行。動的Vector Store ID管理、重複対応、多言語質問対応       |
-| 9B   | a50_qdrant_registration.py         | Qdrantベクトルデータベース一括データ登録スクリプト。4つのCSVファイルを単一コレクションに統合登録。domain別フィルタ検索対応、Named Vectors対応        |
-| 10B  | a50_qdrant_search.py               | Qdrant検索用Streamlit UI。ドメイン絞り込み検索、横断検索、TopK設定、スコア表示、Named Vectors切替機能を提供                                          |
-| 11B  | mcp_qdrant_show.py                 | Qdrantデータ専用表示Streamlitアプリ。Qdrant接続状態チェック、コレクション一覧表示、データ概要取得等の管理・監視機能                                  |
-| 12   | server.py                          | MCPサーバー起動スクリプト。PostgreSQL・Redis接続確認、データベース初期化、FastAPIアプリケーション起動、ポート設定、テストモード対応                  |
+| 1    | setup.py                           | MCP環境セットアップスクリプト。Python環境チェック、必要パッケージ自動インストール（streamlit、openai、qdrant-client等）、環境構築の自動化            |
+| 2    | server.py                          | MCPサーバー起動スクリプト。PostgreSQL・Redis接続確認、データベース初期化、FastAPIアプリケーション起動、ポート設定、テストモード対応                  |
+| 3    | a00_dl_dataset_from_huggingface.py | HuggingFaceからRAG用データセットを一括ダウンロード。カスタマーサポート、医療、科学技術、法律、トリビアの5つのデータセットをCSVファイルとして保存     |
+| 4    | a011_make_rag_data_customer.py     | カスタマーサポートFAQデータ専用のRAG前処理Streamlitアプリ。問題・解決・サポート関連用語の検証機能でデータを質問・回答形式に変換                      |
+| 5    | a013_make_rag_data_medical.py      | 医療QAデータ専用のRAG前処理Streamlitアプリ。症状・診断・治療・薬等の医療関連用語検証機能で医療質問データをRAG用に最適化                              |
+| 6    | a014_make_rag_data_sciq.py         | 科学・技術QAデータ専用のRAG前処理Streamlitアプリ。化学・物理・生物・数学等の科学技術関連用語検証機能でSciQデータセットをRAG検索用に変換              |
+| 7    | a015_make_rag_data_legal.py        | 法律・判例QAデータ専用のRAG前処理Streamlitアプリ。法律・条文・判例・裁判等の法律関連用語検証機能でリーガルベンチデータをRAG用に最適化                |
+| 8    | a02_make_vsid.py                   | OpenAI Vector Store作成用Streamlitアプリ。前処理済みテキストからVector Storeを作成し、vector_stores.jsonに管理情報を保存。重複対応・最新優先選択機能 |
+| 9    | a03_rag_search.py                  | OpenAI Responses API使用のRAG検索Streamlitアプリ。file_searchツールでVector Store検索を実行。動的Vector Store ID管理、重複対応、多言語質問対応       |
+| 10   | a50_qdrant_registration.py         | Qdrantベクトルデータベース一括データ登録スクリプト。4つのCSVファイルを単一コレクションに統合登録。domain別フィルタ検索対応、Named Vectors対応        |
+| 11   | a50_qdrant_search.py               | Qdrant検索用Streamlit UI。ドメイン絞り込み検索、横断検索、TopK設定、スコア表示、Named Vectors切替機能を提供                                          |
+| 12   | mcp_qdrant_show.py                 | Qdrantデータ専用表示Streamlitアプリ。Qdrant接続状態チェック、コレクション一覧表示、データ概要取得等の管理・監視機能                                  |
+| 13   | helper_api.py                      | OpenAI API関連のコア機能。ConfigManager、APIクライアント管理、ログ設定、Responses API型定義、トークン計算、エラーハンドリング等の共通基盤機能        |
+| 14   | helper_rag.py                      | RAGデータ前処理の共通機能モジュール。AppConfig（モデル設定・料金情報）、データ検証、データセット読み込み、前処理、統計表示、ファイル保存等の汎用機能 |
+| 15   | helper_st.py                       | Streamlit関連のヘルパー機能モジュール。Streamlit UI部品の共通機能を提供                                                                              |
 
 ## 📝 概要
 
@@ -114,7 +144,7 @@ graph TD
     class G1,G2,G3 helperBox
 ```
 
-## 📋 詳細処理手順
+## 📋 詳細処理手順　まず、HuggingFaceからテストデータをダウンロードする
 
 ### 🔽 Step 1: HuggingFace Dataset Download
 
