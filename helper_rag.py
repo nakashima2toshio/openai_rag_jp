@@ -596,7 +596,7 @@ def save_files_to_output(df_processed, dataset_type: str, csv_data: str, text_da
     saved_files = {}
 
     # CSVファイルの保存
-    csv_filename = f"preprocessed_{dataset_type}_{len(df_processed)}rows_{timestamp}.csv"
+    csv_filename = f"preprocessed_{dataset_type}.csv"
     csv_path = output_dir / csv_filename
 
     with open(csv_path, 'w', encoding='utf-8') as f:
@@ -631,7 +631,7 @@ def save_files_to_output(df_processed, dataset_type: str, csv_data: str, text_da
         }
     }
 
-    metadata_filename = f"metadata_{dataset_type}_{timestamp}.json"
+    metadata_filename = f"metadata_{dataset_type}.json"
     metadata_path = output_dir / metadata_filename
 
     with open(metadata_path, 'w', encoding='utf-8') as f:

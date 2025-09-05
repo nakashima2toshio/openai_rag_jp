@@ -1,5 +1,18 @@
 Memo
 
+入力
+datasets/customer_support_faq.csv
+datasets/legal_qa.csv
+datasets/medical_qa.csv
+datasets/sciq_qa.csv
+
+出力
+OUTPUT/preprocessed_customer_support_faq.csv
+OUTPUT/preprocessed_legal_qa.csv
+OUTPUT/preprocessed_medical_qa.csv
+OUTPUT/preprocessed_sciq_qa.csv
+
+
 下記プログラムを利用順番で、一覧表、ファイルを以下の列で作成しなさい。
 プログラム名、概要
 
