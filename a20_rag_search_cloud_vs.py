@@ -1,5 +1,5 @@
-# streamlit run a03_rag_search.py --server.port=8501
-# a03_rag_search.py - 最新OpenAI Responses API完全対応版（動的Vector Store対応・重複問題修正版）
+# streamlit run a20_rag_search_cloud_vs.py --server.port=8501
+# a20_rag_search_cloud_vs.py - 最新OpenAI Responses API完全対応版（動的Vector Store対応・重複問題修正版）
 # OpenAI Responses API + file_search ツール + 環境変数APIキー対応 + 動的Vector Store ID管理
 """
 🔍 最新RAG検索アプリケーション（動的Vector Store対応・重複問題修正版）
@@ -13,7 +13,7 @@
    pip install openai-agents
 
 【実行方法】
-streamlit run a03_rag_search.py --server.port=8501
+streamlit run a20_rag_search_cloud_vs.py --server.port=8501
 
 【主要機能】
 ✅ 最新Responses API使用
@@ -28,7 +28,7 @@ streamlit run a03_rag_search.py --server.port=8501
 ✅ 最新Vector Store自動取得・更新機能
 
 【Vector Store連携】
-- a02_make_vsid.py で作成されたVector Storeを自動認識
+- a30_020_make_vsid.py で作成されたVector Storeを自動認識
 - vector_stores.json ファイルで動的管理
 - 同名Vector Store重複時は最新作成日時を優先
 - OpenAI APIから最新状態を取得・更新
@@ -85,7 +85,7 @@ class VectorStoreManager:
         "Legal Q&A"               : "vs_687a062418ec8191872efdbf8f554836"
     }
 
-    # a02_make_vsid.py のVectorStoreConfigと対応するマッピング
+    # a30_020_make_vsid.py のVectorStoreConfigと対応するマッピング
     STORE_NAME_MAPPING = {
         "customer_support_faq": "Customer Support FAQ Knowledge Base",
         "medical_qa"          : "Medical Q&A Knowledge Base",
@@ -136,7 +136,7 @@ class VectorStoreManager:
             config_data = {
                 "vector_stores": stores,
                 "last_updated" : datetime.now().isoformat(),
-                "source"       : "a03_rag_search.py",
+                "source"       : "a20_rag_search_cloud_vs.py",
                 "version"      : "1.1"
             }
 
@@ -451,58 +451,67 @@ class ModernRAGManager:
 
     def search_with_responses_api(self, query: str, store_name: str, store_id: str, **kwargs) -> Tuple[
         str, Dict[str, Any]]:
-        """Responses API + file_search ツールを使用した検索"""
+        """最新Responses API + file_search ツールを使用した検索"""
         try:
-            # file_search ツールの設定
-            file_search_tool = {
-                "type": "file_search",
+            # file_search ツールの設定（正しい型で定義）
+            file_search_tool_dict: Dict[str, Any] = {
+                "type"            : "file_search",
                 "vector_store_ids": [store_id]
             }
 
-            # 選択されたモデルを取得
-            selected_model = kwargs.get('model', 'gpt-4o-mini')
-            
-            # Responses API を使用した検索
+            # オプション設定（型安全な方法）
+            max_results = kwargs.get('max_results', 20)
+            include_results = kwargs.get('include_results', True)
+            filters = kwargs.get('filters', None)
+
+            # 型安全な辞書更新
+            if max_results and isinstance(max_results, int):
+                file_search_tool_dict["max_num_results"] = max_results
+            if filters is not None:
+                file_search_tool_dict["filters"] = filters
+
+            # include パラメータの設定
+            include_params = []
+            if include_results:
+                include_params.append("file_search_call.results")
+
+            # Responses API呼び出し（型安全な方法）
+            # OpenAI SDKの型定義が厳密なため、実際の動作に問題がない場合は型チェックを無視
             response = openai_client.responses.create(
-                model=selected_model,
-                instructions=f"You are a helpful assistant specializing in {store_name}. Search through the vector store to find relevant information and provide accurate, helpful responses.",
+                model="gpt-4o-mini",
                 input=query,
-                tools=[file_search_tool]
+                tools=[file_search_tool_dict],  # type: ignore[arg-type]
+                include=include_params if include_params else None
             )
 
-            # レスポンスの取得
-            response_text = response.output_text if hasattr(response, 'output_text') else response.content
-            citations = []
-            
-            # ファイル引用の抽出（可能な場合）
-            if hasattr(response, 'annotations'):
-                for annotation in response.annotations:
-                    if annotation.type == "file_citation":
-                        citations.append({
-                            "file_id": annotation.file_citation.file_id,
-                            "filename": annotation.file_citation.quote if hasattr(annotation.file_citation, 'quote') else 'Unknown file',
-                            "index": len(citations)
-                        })
+            # レスポンステキストの抽出
+            response_text = self._extract_response_text(response)
 
-            # メタデータの構築
+            # ファイル引用の抽出
+            citations = self._extract_citations(response)
+
+            # メタデータの構築（型を明示的に指定）
             metadata: Dict[str, Any] = {
                 "store_name": store_name,
                 "store_id"  : store_id,
                 "query"     : query,
                 "timestamp" : datetime.now().isoformat(),
-                "model"     : selected_model,
+                "model"     : "gpt-4o-mini",
                 "method"    : "responses_api_file_search",
-                "citations" : citations
+                "citations" : citations,
+                "tool_calls": self._extract_tool_calls(response)
             }
 
-            # 使用統計があれば追加
+            # 使用統計があれば追加（型安全な方法）
             if hasattr(response, 'usage') and response.usage is not None:
                 try:
+                    # ResponseUsageオブジェクトを辞書に変換
                     if hasattr(response.usage, 'model_dump'):
                         metadata["usage"] = response.usage.model_dump()
                     elif hasattr(response.usage, 'dict'):
                         metadata["usage"] = response.usage.dict()
                     else:
+                        # 手動で属性を抽出
                         usage_dict = {}
                         for attr in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
                             if hasattr(response.usage, attr):
@@ -515,14 +524,14 @@ class ModernRAGManager:
             return response_text, metadata
 
         except Exception as e:
-            error_msg = f"Chat Completions API検索でエラーが発生しました: {str(e)}"
+            error_msg = f"Responses API検索でエラーが発生しました: {str(e)}"
             logger.error(error_msg)
             logger.error(traceback.format_exc())
 
             # エラー時のメタデータ（型安全）
             error_metadata: Dict[str, Any] = {
                 "error"     : str(e),
-                "method"    : "chat_completions_error",
+                "method"    : "responses_api_error",
                 "store_name": store_name,
                 "store_id"  : store_id,
                 "query"     : query,
@@ -679,8 +688,6 @@ def initialize_session_state():
         st.session_state.selected_store = store_list[0] if store_list else "Customer Support FAQ"
     if 'selected_language' not in st.session_state:
         st.session_state.selected_language = "English"  # デフォルトは英語（RAGデータに合わせて）
-    if 'selected_model' not in st.session_state:
-        st.session_state.selected_model = "gpt-4o-mini"  # デフォルトモデル
     if 'use_agent_sdk' not in st.session_state:
         st.session_state.use_agent_sdk = False  # デフォルトはResponses API直接使用
     if 'search_options' not in st.session_state:
@@ -792,9 +799,9 @@ def display_test_questions():
 
     # RAGデータが英語の場合の注意書き
     if selected_language == "日本語":
-        st.warning("⚠️ RAGデータは英語で作成されていますが、質問は英語、日本語でも大丈夫です。。")
+        st.warning("⚠️ RAGデータは英語で作成されています。英語での質問をお勧めします。")
     else:
-        st.success("✅ 英語質問（日本語でも可）")
+        st.success("✅ 英語質問（RAGデータに最適化）")
 
     if not questions:
         if selected_language == "English":
@@ -1004,7 +1011,32 @@ def main():
 
     vector_stores, vector_store_list = get_current_vector_stores(force_refresh=force_refresh)
 
-    # ヘッダー
+    # メインタイトルと使い方を最上部に配置
+    st.header("🔍 RAG検索（Cloud:OpenAI Vector Store版）")
+    
+    # 使い方をExpanderで表示
+    with st.expander("📖 使い方", expanded=False):
+        st.markdown("""
+        **RAG検索システムの使い方:**
+        
+        1. **Vector Storeの選択**
+           - 左ペインで使いたい Vector Store を選択します
+           - 各Vector Storeには異なるドメインの知識が格納されています
+        
+        2. **質問の入力方法**
+           - **方法1**: 左ペインのテスト用質問から選択
+           - **方法2**: 下の入力欄で直接質問を入力
+        
+        3. **検索の実行**
+           - 質問を入力後、「🔍 検索実行」ボタンを押下
+           - OpenAI Vector Storeから関連情報を検索し、回答を生成します
+        
+        **💡 ヒント:**
+        - RAGデータは英語で作成されているため、英語での質問を推奨
+        - 各Vector Storeに適した質問内容を選択すると精度が向上します
+        """)
+    
+    # サブヘッダー
     st.write("🔍 最新RAG検索アプリケーション（重複問題修正・最新ID優先版）")
 
     # API状況表示
@@ -1057,39 +1089,6 @@ def main():
             st.error("❌ 利用可能なVector Storeがありません")
             st.stop()
 
-        # テスト用質問（選択されたVector Storeに対応）
-        st.markdown("---")
-        with st.expander("💡 テスト用質問", expanded=True):
-            display_test_questions()
-
-        # モデル選択
-        st.markdown("---")
-        
-        # 利用可能なモデル一覧（Assistants API対応モデルのみ）
-        available_models = [
-            "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"
-        ]
-        
-        try:
-            current_model_index = available_models.index(st.session_state.selected_model)
-        except ValueError:
-            current_model_index = available_models.index("gpt-4o-mini")  # デフォルト
-            
-        selected_model = st.selectbox(
-            "モデルを選択",
-            options=available_models,
-            index=current_model_index,
-            key="model_selection",
-            help="RAG検索に使用するモデルを選択"
-        )
-        st.session_state.selected_model = selected_model
-        
-        # モデル情報表示
-        if "o1" in selected_model or "o3" in selected_model or "o4" in selected_model or "gpt-5" in selected_model:
-            st.info("🧠 推論・最先端モデル")
-        else:
-            st.info("⚡ 標準モデル")
-
         # 言語選択
         st.markdown("---")
         selected_language = st.selectbox(
@@ -1107,7 +1106,6 @@ def main():
         else:
             st.warning("⚠️ RAGデータは英語です")
 
-
         # 検索オプション
         display_search_options()
 
@@ -1119,7 +1117,11 @@ def main():
         # システム情報
         display_system_info()
 
-    # メインコンテンツ
+        # テスト用質問（選択されたVector Storeに対応）
+        with st.expander("💡 テスト用質問", expanded=True):
+            display_test_questions()
+
+    # 質問入力部分（横1段構成）
     st.header("❓ 質問入力")
 
     # 質問入力フォーム
@@ -1132,12 +1134,23 @@ def main():
             help="英語での質問がRAGデータに最適化されています"
         )
 
-        submitted = st.form_submit_button("🔍 検索実行", type="primary")
+        col_left, col_center, col_right = st.columns([1, 1, 1])
+        with col_center:
+            submitted = st.form_submit_button("🔍 検索実行", type="primary", use_container_width=True)
+    
+    # 日本語の質問例を追加
+    with st.expander("💡 質問例", expanded=False):
+        st.markdown("**日本語での質問例:**")
+        example_question = "新規アカウントは、どう作成すればよいか？　日本語で回答してください。"
+        if st.button(f"📝 {example_question}", use_container_width=True):
+            st.session_state.current_query = example_question
+            st.rerun()
 
+    # 検索結果表示部分
     if submitted and query.strip():
         st.session_state.current_query = query
-
-        # 検索実行
+        
+        st.markdown("---")
         st.header("🤖 検索結果")
 
         with st.spinner("🔍 Vector Store検索中..."):
@@ -1145,47 +1158,45 @@ def main():
             selected_store_id = vector_stores.get(selected_store, "")
             if not selected_store_id:
                 st.error(f"❌ Vector Store ID が見つかりません: {selected_store}")
-                return
+            else:
+                # 検索オプションの取得
+                search_options = st.session_state.search_options
 
-            # 検索オプションの取得
-            search_options = st.session_state.search_options
+                # 検索実行（store_idも渡す）
+                final_result, final_metadata = rag_manager.search(
+                    query,
+                    selected_store,
+                    selected_store_id,
+                    use_agent_sdk=st.session_state.use_agent_sdk,
+                    max_results=search_options['max_results'],
+                    include_results=search_options['include_results']
+                )
 
-            # 検索実行（store_idも渡す）
-            final_result, final_metadata = rag_manager.search(
-                query,
-                selected_store,
-                selected_store_id,
-                use_agent_sdk=st.session_state.use_agent_sdk,
-                max_results=search_options['max_results'],
-                include_results=search_options['include_results'],
-                model=st.session_state.selected_model
-            )
+                # 結果表示
+                display_search_results(final_result, final_metadata)
 
-        # 結果表示
-        display_search_results(final_result, final_metadata)
+                # 検索履歴に追加（型安全）
+                history_item: Dict[str, Any] = {
+                    "query"         : query,
+                    "store_name"    : selected_store,
+                    "store_id"      : selected_store_id,
+                    "timestamp"     : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "method"        : final_metadata.get('method', 'unknown'),
+                    "citations"     : final_metadata.get('citations', []),
+                    "result_preview": final_result[:200] + "..." if len(final_result) > 200 else final_result
+                }
 
-        # 検索履歴に追加（型安全）
-        history_item: Dict[str, Any] = {
-            "query"         : query,
-            "store_name"    : selected_store,
-            "store_id"      : selected_store_id,
-            "timestamp"     : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "method"        : final_metadata.get('method', 'unknown'),
-            "citations"     : final_metadata.get('citations', []),
-            "result_preview": final_result[:200] + "..." if len(final_result) > 200 else final_result
-        }
-
-        # 重複チェック
-        if not any(item['query'] == query and item['store_name'] == selected_store
-                   for item in st.session_state.search_history):
-            st.session_state.search_history.insert(0, history_item)
-            st.session_state.search_history = st.session_state.search_history[:50]  # 最新50件保持
+                # 重複チェック
+                if not any(item['query'] == query and item['store_name'] == selected_store
+                           for item in st.session_state.search_history):
+                    st.session_state.search_history.insert(0, history_item)
+                    st.session_state.search_history = st.session_state.search_history[:50]  # 最新50件保持
 
     elif submitted and not query.strip():
         st.error("質問を入力してください")
 
-    elif not st.session_state.current_query:
-        st.header("🤖 検索結果")
+    # 初期状態の表示
+    if not st.session_state.current_query:
         st.info("質問を入力して検索を実行してください")
 
         # API機能説明
@@ -1236,7 +1247,7 @@ def main():
 
             - **自動更新**: OpenAI APIから最新のVector Store一覧を取得
             - **設定ファイル連携**: `vector_stores.json` で永続化
-            - **a02_make_vsid.py 連携**: 新規作成されたVector Storeを自動認識
+            - **a30_020_make_vsid.py 連携**: 新規作成されたVector Storeを自動認識
             - **フォールバック**: 設定ファイルがない場合はデフォルト値を使用
 
             **設定ファイル形式:**
@@ -1248,7 +1259,7 @@ def main():
                 ...
               },
               "last_updated": "2025-01-XX...",
-              "source": "a03_rag_search.py",
+              "source": "a20_rag_search_cloud_vs.py",
               "version": "1.1"
             }
             ```
@@ -1282,7 +1293,7 @@ def main():
             **Vector Store関連エラー:**
             - Vector Store IDが正しいか確認
             - 「最新情報に更新」ボタンで再取得
-            - a02_make_vsid.py で新規作成後は更新が必要
+            - a30_020_make_vsid.py で新規作成後は更新が必要
 
             **その他のエラー:**
             - OpenAI SDKが最新版か確認: `pip install --upgrade openai`
@@ -1299,7 +1310,7 @@ def main():
     st.markdown("#### 最新RAG検索アプリケーション（重複問題修正・最新ID優先版）")
     st.markdown("🚀 **OpenAI Responses API + file_search ツール** による次世代RAG")
     st.markdown("✨ **修正機能**: 重複Vector Store ID問題解決、最新作成日時優先")
-    st.markdown("🔗 **a02_make_vsid.py 連携**: 新規Vector Store自動認識")
+    st.markdown("🔗 **a30_020_make_vsid.py 連携**: 新規Vector Store自動認識")
     st.markdown("🔑 **セキュリティ**: 環境変数でのAPIキー管理")
     if AGENT_SDK_AVAILABLE:
         st.markdown("🔧 **Agent SDK**: セッション管理サポート（簡易版）")
@@ -1310,4 +1321,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# streamlit run a03_rag_search.py --server.port=8501
+# streamlit run a20_rag_search_cloud_vs.py --server.port=8501

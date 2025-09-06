@@ -5,6 +5,7 @@
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/OUTPUT" />
       <excludeFolder url="file://$MODULE_DIR$/datasets" />
+      <excludeFolder url="file://$MODULE_DIR$/old_code" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.12 (openai_rag_jp)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

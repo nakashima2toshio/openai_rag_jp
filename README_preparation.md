@@ -13,6 +13,10 @@
 - メモリ: 8GB以上
 - ディスク容量: 10GB以上（データセット保存用）
 
+## 契約関連
+- （1）https://chatgpt.com/auth/login — ChatGPTの利用開始ページ（無料利用やPlus/Go/Teamの申込み・管理もここから行えます）。  ￼
+- （2）https://platform.openai.com/signup — 開発者向け「OpenAI API」のサインアップページ（APIキー発行・請求管理は同プラットフォーム内）。
+
 ## セットアップ手順
 
 ### 1. リポジトリのクローン

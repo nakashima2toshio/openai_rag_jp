@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-a01_make_rag_data.py - 統合RAGデータ処理ツール
+a01_load_set_rag_data.py - 統合RAGデータ処理ツール
 ===============================================
-起動: streamlit run a01_make_rag_data.py --server.port=8501
+起動: streamlit run a01_load_set_rag_data.py --server.port=8501
 
 【主要機能】
 ✅ 4種類のデータセットタイプを統合処理

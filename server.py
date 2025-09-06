@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MCPサーバー起動スクリプト  
+Qdrantサーバー起動スクリプト  
 Usage: python server.py [--port PORT] [--test]
 """
 
@@ -13,52 +13,81 @@ import requests
 from pathlib import Path
 
 
-def check_database_connections():
-    """データベース接続確認"""
+def check_qdrant_connection():
+    """Qdrant接続確認"""
     connections_ok = True
     
-    # PostgreSQL接続確認
-    print("🐘 PostgreSQL接続確認...")
+    # Qdrant接続確認
+    print("🔍 Qdrant接続確認...")
     try:
-        import psycopg2
-        conn_str = os.getenv('PG_CONN_STR', 'postgresql://testuser:testpass@localhost:5432/testdb')
-        conn = psycopg2.connect(conn_str)
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        cursor.fetchone()
-        conn.close()
-        print("  ✅ PostgreSQL接続成功")
+        from qdrant_client import QdrantClient
+        qdrant_url = os.getenv('QDRANT_URL', 'http://localhost:6333')
+        client = QdrantClient(url=qdrant_url, timeout=5)
+        collections = client.get_collections()
+        print(f"  ✅ Qdrant接続成功 (コレクション数: {len(collections.collections)})")
     except ImportError:
-        print("  ❌ psycopg2-binary パッケージが不足しています")
+        print("  ❌ qdrant-client パッケージが不足しています")
         connections_ok = False
     except Exception as e:
-        print(f"  ❌ PostgreSQL接続失敗: {e}")
-        connections_ok = False
-    
-    # Redis接続確認
-    print("🔴 Redis接続確認...")
-    try:
-        import redis
-        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-        r = redis.from_url(redis_url)
-        r.ping()
-        print("  ✅ Redis接続成功")
-    except ImportError:
-        print("  ❌ redis パッケージが不足しています")
-        connections_ok = False
-    except Exception as e:
-        print(f"  ❌ Redis接続失敗: {e}")
+        print(f"  ❌ Qdrant接続失敗: {e}")
         connections_ok = False
     
     if not connections_ok:
         print("\n💡 解決方法:")
-        print("1. Dockerサービスを起動:")
-        print("   docker-compose -f docker-compose/docker-compose.yml up -d")
-        print("2. データを投入:")
-        print("   python data.py")
+        print("1. Qdrantサーバーを起動:")
+        print("   docker-compose -f docker-compose/docker-compose.yml up -d qdrant")
+        print("   または")
+        print("   docker run -p 6333:6333 qdrant/qdrant")
+        print("2. Qdrantデータを投入:")
+        print("   python qdrant_data_loader.py --recreate")
     
     return connections_ok
 
+
+def start_qdrant_server():
+    """Qdrantサーバーを起動"""
+    print("🐳 Qdrantサーバーを確認中...")
+    try:
+        from qdrant_client import QdrantClient
+        client = QdrantClient(url="http://localhost:6333", timeout=5)
+        client.get_collections()
+        print("✅ Qdrantサーバーは既に稼働中")
+        return True
+    except Exception:
+        print("🐳 QdrantサーバーをDockerで起動中...")
+        try:
+            # Docker Composeを優先
+            docker_compose_path = Path("docker-compose/docker-compose.yml")
+            if docker_compose_path.exists():
+                subprocess.run([
+                    "docker-compose", "-f", str(docker_compose_path), 
+                    "up", "-d", "qdrant"
+                ], check=True, capture_output=True)
+            else:
+                # 単独でDocker起動
+                subprocess.run([
+                    "docker", "run", "-d",
+                    "--name", "qdrant",
+                    "-p", "6333:6333",
+                    "qdrant/qdrant"
+                ], check=True, capture_output=True)
+            
+            # 起動待機
+            import time
+            for _ in range(10):
+                try:
+                    client = QdrantClient(url="http://localhost:6333", timeout=5)
+                    client.get_collections()
+                    print("✅ Qdrantサーバーが起動しました")
+                    return True
+                except:
+                    time.sleep(1)
+            
+            print("❌ Qdrantサーバーの起動に失敗")
+            return False
+        except Exception as e:
+            print(f"❌ DockerによるQdrant起動失敗: {e}")
+            return False
 
 def start_api_server(port=8000):
     """APIサーバーを起動"""
@@ -66,7 +95,8 @@ def start_api_server(port=8000):
     
     # サーバーファイルの存在確認
     if not Path("mcp_api_server.py").exists():
-        print("❌ mcp_api_server.py が見つかりません")
+        print("⚠️ mcp_api_server.py が見つかりません")
+        print("🔍 代わりにQdrant検索UIを起動可能です")
         return None
     
     # バックグラウンドでAPIサーバーを起動
@@ -152,26 +182,56 @@ def display_usage_info(port=8000):
     print(f"- ポート確認: netstat -an | grep {port}")
 
 
+def start_streamlit_ui():
+    """ストリームリットUIを起動"""
+    print("🌐 Streamlit UIを起動中...")
+    if Path("a50_qdrant_search.py").exists():
+        try:
+            process = subprocess.Popen([
+                sys.executable, "-m", "streamlit", "run",
+                "a50_rag_search_local_qdrant.py",
+                "--server.port", "8504"
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print("✅ Streamlit UIが起動しました")
+            print("📄 URL: http://localhost:8504")
+            return process
+        except Exception as e:
+            print(f"❌ Streamlit UI起動失敗: {e}")
+            return None
+    else:
+        print("❌ a50_rag_search_local_qdrant.py が見つかりません")
+        return None
+
 def main():
-    parser = argparse.ArgumentParser(description="MCPサーバー起動")
-    parser.add_argument("--port", type=int, default=8000, help="ポート番号（デフォルト: 8000）")
+    parser = argparse.ArgumentParser(description="Qdrantサーバー起動")
+    parser.add_argument("--port", type=int, default=8000, help="APIポート番号（デフォルト: 8000）")
     parser.add_argument("--test", action="store_true", help="起動後にテストを実行")
+    parser.add_argument("--no-ui", action="store_true", help="Streamlit UIを起動しない")
     args = parser.parse_args()
     
-    print("🚀 MCPサーバー起動を開始します")
+    print("🚀 Qdrantサーバー起動を開始します")
     print("=" * 50)
     
-    # 1. データベース接続確認
-    if not check_database_connections():
-        print("❌ データベース接続に失敗しました")
-        print("データを投入してください: python data.py")
+    # 0. Qdrantサーバー起動
+    if not start_qdrant_server():
+        print("❌ Qdrantサーバーの起動に失敗しました")
+        print("手動で起動してください:")
+        print("  docker run -p 6333:6333 qdrant/qdrant")
         sys.exit(1)
     
-    # 2. APIサーバー起動
-    server_process = start_api_server(args.port)
-    if not server_process:
-        print("❌ APIサーバーの起動に失敗しました")
+    # 1. Qdrant接続確認
+    if not check_qdrant_connection():
+        print("❌ Qdrant接続に失敗しました")
+        print("データを投入してください: python qdrant_data_loader.py --recreate")
         sys.exit(1)
+    
+    # 2. APIサーバー起動（オプション）
+    server_process = start_api_server(args.port)
+    
+    # 3. Streamlit UI起動（オプション）
+    ui_process = None
+    if not args.no_ui:
+        ui_process = start_streamlit_ui()
     
     # 3. テスト実行（指定された場合）
     if args.test:
@@ -184,14 +244,29 @@ def main():
     display_usage_info(args.port)
     
     print("\n🎉 サーバー起動完了!")
-    print("⏸️ サーバーを停止するには Ctrl+C を押してください...")
+    print("\n📚 利用可能なコマンド:")
+    print("  データ登録: python qdrant_data_loader.py --recreate")
+    print("  詳細登録: python a50_qdrant_registration.py --recreate")
+    if ui_process:
+        print("  検索UI: http://localhost:8504")
+    print("\n⏸️ サーバーを停止するには Ctrl+C を押してください...")
     
     try:
-        server_process.wait()
+        if server_process:
+            server_process.wait()
+        elif ui_process:
+            ui_process.wait()
+        else:
+            # どちらも起動していない場合はキー入力待ち
+            input("\nEnterキーで終了")
     except KeyboardInterrupt:
         print("\n🛑 サーバーを停止中...")
-        server_process.terminate()
-        server_process.wait()
+        if server_process:
+            server_process.terminate()
+            server_process.wait()
+        if ui_process:
+            ui_process.terminate()
+            ui_process.wait()
         print("✅ サーバーが停止しました")
 
 

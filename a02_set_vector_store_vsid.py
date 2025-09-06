@@ -1,6 +1,6 @@
-# a02_make_vsid.py
+# a02_set_vector_store_vsid.py
 # Vector Store作成Streamlitアプリ（完全修正版）
-# streamlit run a02_make_vsid.py --server.port=8502
+# streamlit run a02_set_vector_store_vsid.py --server.port=8502
 
 import streamlit as st
 import pandas as pd
@@ -61,50 +61,55 @@ class VectorStoreConfig:
     overlap: int = 100
     max_file_size_mb: int = 400  # OpenAI制限より少し余裕を持って設定
     max_chunks_per_file: int = 40000  # チャンク数制限
+    csv_text_column: str = "Combined_Text"  # CSVファイルから読み込むテキストカラム名
 
     @classmethod
     def get_all_configs(cls) -> Dict[str, 'VectorStoreConfig']:
-        """全データセット設定を取得（ファイルサイズ制限対応）"""
+        """全データセット設定を取得（CSVファイル対応版）"""
         return {
             "customer_support_faq": cls(
                 dataset_type="customer_support_faq",
-                filename="customer_support_faq.txt",
+                filename="preprocessed_customer_support_faq.csv",
                 store_name="Customer Support FAQ Knowledge Base",
                 description="カスタマーサポートFAQデータベース",
                 chunk_size=2000,  # サイズ拡大
                 overlap=100,
                 max_file_size_mb=30,  # より保守的な制限
-                max_chunks_per_file=4000  # チャンク数削減
+                max_chunks_per_file=4000,  # チャンク数削減
+                csv_text_column="Combined_Text"
             ),
             "medical_qa"          : cls(
                 dataset_type="medical_qa",
-                filename="medical_qa.txt",
+                filename="preprocessed_medical_qa.csv",
                 store_name="Medical Q&A Knowledge Base",
                 description="医療質問回答データベース",
                 chunk_size=16000,  # 大幅増加：チャンク数を半減
                 overlap=300,
                 max_file_size_mb=20,  # さらに厳格なファイルサイズ制限
-                max_chunks_per_file=6000  # チャンク数を大幅削減
+                max_chunks_per_file=6000,  # チャンク数を大幅削減
+                csv_text_column="Combined_Text"
             ),
             "sciq_qa"             : cls(
                 dataset_type="sciq_qa",
-                filename="sciq_qa.txt",
+                filename="preprocessed_sciq_qa.csv",
                 store_name="Science & Technology Q&A Knowledge Base",
                 description="科学技術質問回答データベース",
                 chunk_size=2000,  # サイズ拡大
                 overlap=100,
                 max_file_size_mb=25,  # より保守的な制限
-                max_chunks_per_file=8000  # チャンク数削減
+                max_chunks_per_file=8000,  # チャンク数削減
+                csv_text_column="Combined_Text"
             ),
             "legal_qa"            : cls(
                 dataset_type="legal_qa",
-                filename="legal_qa.txt",
+                filename="preprocessed_legal_qa.csv",
                 store_name="Legal Q&A Knowledge Base",
                 description="法律質問回答データベース",
                 chunk_size=3000,  # サイズ拡大
                 overlap=150,
                 max_file_size_mb=25,  # より保守的な制限
-                max_chunks_per_file=6000  # チャンク数削減
+                max_chunks_per_file=6000,  # チャンク数削減
+                csv_text_column="Combined_Text"
             )
         }
 
@@ -118,27 +123,38 @@ class VectorStoreProcessor:
     def __init__(self):
         self.configs = VectorStoreConfig.get_all_configs()
 
-    def load_text_file(self, filepath: Path) -> List[str]:
-        """テキストファイルを読み込み、行ごとのリストとして返す"""
+    def load_csv_file(self, filepath: Path, text_column: str = "Combined_Text") -> List[str]:
+        """CSVファイルを読み込み、指定カラムのテキストをリストとして返す"""
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-
-            # 空行と短すぎる行を除去
+            # CSVファイルを読み込み
+            df = pd.read_csv(filepath, encoding='utf-8')
+            
+            # 指定カラムが存在するか確認
+            if text_column not in df.columns:
+                logger.error(f"指定されたカラム '{text_column}' が見つかりません。利用可能なカラム: {df.columns.tolist()}")
+                return []
+            
+            # テキストカラムから値を取得（NaNを除外）
+            texts = df[text_column].dropna().astype(str).tolist()
+            
+            # 空文字列と短すぎるテキストを除去
             cleaned_lines = []
-            for line in lines:
-                line = line.strip()
-                if line and len(line) > 10:  # 10文字以上の行のみ保持
-                    cleaned_lines.append(line)
+            for text in texts:
+                text = text.strip()
+                if text and len(text) > 10:  # 10文字以上のテキストのみ保持
+                    cleaned_lines.append(text)
 
-            logger.info(f"ファイル読み込み完了: {filepath.name} - {len(cleaned_lines)}行")
+            logger.info(f"CSVファイル読み込み完了: {filepath.name} - {len(cleaned_lines)}件のテキスト")
             return cleaned_lines
 
         except FileNotFoundError:
             logger.error(f"ファイルが見つかりません: {filepath}")
             return []
+        except pd.errors.EmptyDataError:
+            logger.error(f"CSVファイルが空です: {filepath}")
+            return []
         except Exception as e:
-            logger.error(f"ファイル読み込みエラー: {filepath} - {e}")
+            logger.error(f"CSVファイル読み込みエラー: {filepath} - {e}")
             return []
 
     def chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
@@ -427,8 +443,8 @@ class VectorStoreManager:
             return {"success": False, "error": f"ファイルが見つかりません: {filepath}"}
 
         try:
-            # Step 1: ファイル読み込み
-            text_lines = self.processor.load_text_file(filepath)
+            # Step 1: CSVファイル読み込み
+            text_lines = self.processor.load_csv_file(filepath, config.csv_text_column)
 
             if not text_lines:
                 return {"success": False, "error": f"有効なテキストが見つかりません: {filepath}"}
@@ -1030,14 +1046,27 @@ def main():
             if output_dir.exists():
                 st.write(f"**ディレクトリパス**: `{output_dir.absolute()}`")
 
-                # ディレクトリ内ファイル一覧
-                files = list(output_dir.glob("*.txt"))
-                st.write(f"**テキストファイル数**: {len(files)}")
+                # ディレクトリ内ファイル一覧（CSVファイルを対象）
+                csv_files = list(output_dir.glob("preprocessed_*.csv"))
+                txt_files = list(output_dir.glob("*.txt"))
+                st.write(f"**前処理済みCSVファイル数**: {len(csv_files)}")
+                st.write(f"**テキストファイル数**: {len(txt_files)}")
 
-                for file in files:
-                    file_size = file.stat().st_size
-                    modified_time = datetime.fromtimestamp(file.stat().st_mtime)
-                    st.write(f"- {file.name}: {file_size:,} bytes ({modified_time.strftime('%Y-%m-%d %H:%M:%S')})")
+                # CSVファイルを先に表示
+                if csv_files:
+                    st.write("**前処理済みCSVファイル:**")
+                    for file in csv_files:
+                        file_size = file.stat().st_size
+                        modified_time = datetime.fromtimestamp(file.stat().st_mtime)
+                        st.write(f"- {file.name}: {file_size:,} bytes ({modified_time.strftime('%Y-%m-%d %H:%M:%S')})")
+                
+                # その他のテキストファイル
+                if txt_files:
+                    st.write("**その他のテキストファイル:**")
+                    for file in txt_files:
+                        file_size = file.stat().st_size
+                        modified_time = datetime.fromtimestamp(file.stat().st_mtime)
+                        st.write(f"- {file.name}: {file_size:,} bytes ({modified_time.strftime('%Y-%m-%d %H:%M:%S')})")
             else:
                 st.error(f"OUTPUTディレクトリが存在しません: {output_dir}")
 
@@ -1060,4 +1089,4 @@ if __name__ == "__main__":
     main()
 
 # 実行コマンド:
-# streamlit run a02_make_vsid.py --server.port=8502
+# streamlit run a02_set_vector_store_vsid.py --server.port=8502

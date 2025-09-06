@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-a50_qdrant_search.py — Streamlit UI（ドメイン絞り・横断・TopK・score表示、Named Vectors切替）
+a50_rag_search_local_qdrant.py — Streamlit UI（ドメイン絞り・横断・TopK・score表示、Named Vectors切替）
 ------------------------------------------------------------------------------
-起動: streamlit run a50_qdrant_search.py --server.port=8504
+起動: streamlit run a50_rag_search_local_qdrant.py --server.port=8504
 """
 import os
 from typing import Dict, Any, List, Optional
