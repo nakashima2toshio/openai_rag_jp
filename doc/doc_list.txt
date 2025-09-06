@@ -1,33 +1,38 @@
 Memo
 
-[準備]
-[docker-compose]
-docker-compose/docker-compose.yml
+README.md を最新版に、かつ以下の資料を統合した資料にアップデートしたい。
+  RAG構築（Cloud版、Local-Qdrant版）、検索が主眼とし、
+  全体構成、記述内容まで、全体的に見直し、作成せよ。
 
-[setup server]
-setup.py
-server.py
+  （1）以下のREADME資料の構成、リンク、1行概要を持つ。
+  README_2.md
+  README_preparation.md
+  README_qdrant.md
+  README_qdrant_setup.md
 
-[preparation data]
-a01_load_set_rag_data.py
-a02_set_vector_store_vsid.py
-a10_show_qdrant_data.py
+  （2）以下のグループ、個別の資料の構成、リンク、1行概要を持つ。
 
-[RAG Cloud]
-a20_rag_search_cloud_vs.py
+  [docker-compose]
+  doc/docker-compose.md
 
-[RAG Local]
-a50_qdrant_registration.py
-a50_rag_search_local_qdrant.py
+  [setup]
+  doc/server.md
+  doc/setup.md
 
-[helper]
-helper_api.py
-helper_rag.py
-helper_st.py
+  [個別]
+  doc/a01_load_set_rag_data.md
+  doc/a02_set_vector_store_vsid.md
+  doc/a10_show_qdrant_data.md
+  doc/a20_rag_search_cloud_vs.md
+  doc/a50_qdrant_registration.md
+  doc/a50_rag_search_local_qdrant.md
 
-[etc]
-mcp_qdrant_show.py
-qdrant_data_loader.py
+  [common]
+  doc/config_yml.md
+  doc/helper_api.md
+  doc/helper_rag.md
+  doc/helper_st.md
+
 
 ------------------------------------
 
