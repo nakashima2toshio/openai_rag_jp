@@ -8,6 +8,18 @@
 - [README_qdrant.md](./README_qdrant.md) - Qdrantローカル版の詳細
 - [README_qdrant_setup.md](./README_qdrant_setup.md) - Qdrant高度な設定
 
+## 🔗 関連プロジェクト## 🔗 関連プロジェクト
+
+
+| プロジェクト                                                             | 説明                                         | ステータス |
+| ------------------------------------------------------------------------ | -------------------------------------------- | ---------- |
+| [openai_api_jp](https://github.com/nakashima2toshio/openai_api_jp)       | OpenAI API完全ガイド（本プロジェクト）       | ✅ 公開中  |
+| [anthropic_api_jp](https://github.com/nakashima2toshio/anthropic_api_jp) | Anthropic Claude API活用                     | ✅ 公開中  |
+| [openai_rag_jp](https://github.com/nakashima2toshio/openai_rag_jp)       | RAG実装パターン集（cloud版、Local-Qdrant版） | ✅ 公開中  |
+| [openai_mcp_jp](https://github.com/nakashima2toshio/openai_mcp_jp)       | MCP(Model Context Protocol)実装              | 🚧 整備中  |
+| [openai_django_jp](https://github.com/nakashima2toshio/openai_django_jp) | OpenAI API + Django実装                      | 🚧 整備中  |
+| [openai_agent_jp](https://github.com/nakashima2toshio/openai_agent_jp)   | AIエージェント構築                           | 📝 作成中  |
+
 ## 📌 概要
 
 日本語対応のRAG（Retrieval-Augmented Generation）システムの完全実装版。OpenAI APIとQdrantベクトルデータベースを使用して、クラウド版とローカル版の両方のRAGシステムを構築できます。
