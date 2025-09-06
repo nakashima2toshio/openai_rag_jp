@@ -1,5 +1,13 @@
 # 🚀 OpenAI RAG System - クラウド＆ローカル対応 RAG構築・検索システム
 
+## 📚 ドキュメント
+
+詳細な使用方法とサンプルプログラムについては：
+- [README_2.md](./README_2.md) - 目的別の詳細な使用例
+- [README_preparation.md](./README_preparation.md) - 開発環境の詳細設定
+- [README_qdrant.md](./README_qdrant.md) - Qdrantローカル版の詳細
+- [README_qdrant_setup.md](./README_qdrant_setup.md) - Qdrant高度な設定
+
 ## 📌 概要
 
 日本語対応のRAG（Retrieval-Augmented Generation）システムの完全実装版。OpenAI APIとQdrantベクトルデータベースを使用して、クラウド版とローカル版の両方のRAGシステムを構築できます。
@@ -91,31 +99,29 @@ python server.py
 
 ## 🔄 RAG構築フロー
 
-### 📊 Step 1: データセットの準備
+### 📊 Step 1: 統合データ処理ツール
 
+**🆕 統合RAGデータ処理ツール（Streamlit UI）:**
 ```bash
-# HuggingFaceからデータセットをダウンロード
-python a00_dl_dataset_from_huggingface.py
+# 統合RAGデータ処理ツールを起動
+streamlit run a01_load_set_rag_data.py --server.port=8501
 ```
 
-ダウンロードされるデータセット：
-- 📞 カスタマーサポートFAQ (`customer_support_faq.csv`)
-- 🏥 医療Q&A (`medical_qa.csv`)
-- 🔬 科学技術Q&A (`sciq_qa.csv`)
-- ⚖️ 法律Q&A (`legal_qa.csv`)
+統合ツールの特徴：
+- ✅ 4種類のデータセットを単一UIで処理
+- ✅ HuggingFaceから直接ダウンロード＆処理
+- ✅ データ品質チェックと検証機能
+- ✅ トークン使用量の事前推定
+- ✅ CSV/TXT/JSON形式での出力
+- ✅ メタデータの自動保存
 
-### 🔨 Step 2: データの前処理
+対応データセット（HuggingFaceから最新データをダウンロード）：
+- 📞 カスタマーサポートFAQ
+- 🏥 医療Q&A（推論過程付き）
+- 🔬 科学技術Q&A（選択肢付き）
+- ⚖️ 法律Q&A
 
-各ドメインごとにデータを処理：
-
-```bash
-python a011_make_rag_data_customer.py  # カスタマーサポート
-python a013_make_rag_data_medical.py   # 医療
-python a014_make_rag_data_sciq.py      # 科学技術
-python a015_make_rag_data_legal.py     # 法律
-```
-
-### 💾 Step 3: ベクトルストアへの登録
+### 💾 Step 2: ベクトルストアへの登録
 
 #### ☁️ クラウド版（OpenAI Vector Store）
 
@@ -168,11 +174,7 @@ openai_rag_jp/
 │       └── docker-compose.yml
 │
 ├── 📥 データ取得・処理
-│   ├── a00_dl_dataset_from_huggingface.py  # データセットダウンロード
-│   ├── a011_make_rag_data_customer.py      # カスタマーサポート処理
-│   ├── a013_make_rag_data_medical.py       # 医療データ処理
-│   ├── a014_make_rag_data_sciq.py          # 科学技術データ処理
-│   └── a015_make_rag_data_legal.py         # 法律データ処理
+│   └── a01_load_set_rag_data.py    # 統合RAGデータ処理ツール（HuggingFaceからダウンロード＆処理）
 │
 ├── ☁️ クラウド版RAG
 │   ├── a02_make_vsid.py             # OpenAI Vector Store作成
@@ -243,8 +245,9 @@ openai_rag_jp/
 ### 例1: カスタマーサポートFAQシステム
 
 ```bash
-# データ準備と処理
-python a011_make_rag_data_customer.py
+# 統合ツールでデータ準備
+streamlit run a01_load_set_rag_data.py
+# UIで「カスタマーサポート」を選択して処理
 
 # クラウド版で実行
 python a02_make_vsid.py
@@ -258,8 +261,9 @@ streamlit run a50_qdrant_search.py
 ### 例2: 医療情報検索システム
 
 ```bash
-# データ準備
-python a013_make_rag_data_medical.py
+# 統合ツールでデータ準備
+streamlit run a01_load_set_rag_data.py
+# UIで「医療QA」を選択、Complex_CoTを含めて処理
 
 # ローカルQdrantで構築
 python a50_qdrant_registration.py --domain medical --include-answer
@@ -269,11 +273,9 @@ streamlit run a50_qdrant_search.py
 ### 例3: マルチドメイン統合検索
 
 ```bash
-# 全ドメインのデータを準備
-python a011_make_rag_data_customer.py
-python a013_make_rag_data_medical.py
-python a014_make_rag_data_sciq.py
-python a015_make_rag_data_legal.py
+# 統合ツールで全ドメインのデータを順次準備
+streamlit run a01_load_set_rag_data.py
+# UIで各ドメインを順番に選択して処理
 
 # 統合検索システムの構築
 python a50_qdrant_registration.py --recreate
@@ -346,9 +348,9 @@ from concurrent.futures import ThreadPoolExecutor
 ### データの定期更新
 
 ```bash
-# 新しいデータの追加
-python a00_dl_dataset_from_huggingface.py
-python a011_make_rag_data_customer.py
+# 統合ツールで新しいデータを追加
+streamlit run a01_load_set_rag_data.py
+# HuggingFaceから最新データをダウンロード＆処理
 
 # ベクトルストアの更新
 python a50_qdrant_registration.py --recreate
@@ -384,14 +386,6 @@ docker exec qdrant qdrant-backup create backup-$(date +%Y%m%d)
 1. [トラブルシューティング](#-トラブルシューティング)を確認
 2. `logs/`ディレクトリのエラーログを確認
 3. 各機能の詳細ドキュメント（`doc/`）を参照
-
-## 🎓 さらに学ぶ
-
-詳細な使用方法とサンプルプログラムについては：
-- [README_2.md](./README_2.md) - 目的別の詳細な使用例
-- [README_preparation.md](./README_preparation.md) - 開発環境の詳細設定
-- [README_qdrant.md](./README_qdrant.md) - Qdrantローカル版の詳細
-- [README_qdrant_setup.md](./README_qdrant_setup.md) - Qdrant高度な設定
 
 ---
 

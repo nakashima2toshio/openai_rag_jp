@@ -57,8 +57,8 @@ graph TD
     F --> P[JSON Export]
     F --> Q[OUTPUT Directory]
     
-    H --> R[datasets/]
-    Q --> S[OUTPUT/]
+    H --> R["datasets/"]
+    Q --> S["OUTPUT/"]
 ```
 
 ### 2.2 データフロー図

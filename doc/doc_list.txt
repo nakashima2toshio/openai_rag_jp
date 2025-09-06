@@ -35,6 +35,13 @@ README.md を最新版に、かつ以下の資料を統合した資料にアッ�
 
 
 ------------------------------------
+old_code/a00_dl_dataset_from_huggingface.py
+old_code/a011_make_rag_data_customer.py
+old_code/a013_make_rag_data_medical.py
+old_code/a014_make_rag_data_sciq.py
+old_code/a015_make_rag_data_legal.py
+
+------------------------------------
 
  QdrantをローカルRAGサーチに使用するための全ての設定と実装が完了しました。
 
