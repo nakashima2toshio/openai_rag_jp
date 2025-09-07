@@ -1,6 +1,6 @@
 # 🚀 RAG(Cloud & local-Qdrant)From Scratch with Streamlit
-- スクラッチで、RAG構築（クラウド版＆ローカル-Qdrant版）
-
+## スクラッチで、RAG構築（クラウド版＆ローカル-Qdrant版）
+- If you prefer English, please use translation tools like Google Translate to read the English version.
 ## 📚 ドキュメント
 
 詳細な使用方法とサンプルプログラムについては：
