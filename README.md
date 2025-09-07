@@ -1,4 +1,5 @@
-# 🚀 OpenAI RAG System - クラウド＆ローカル対応 RAG構築・検索システム
+# 🚀 RAG(Cloud & local-Qdrant)From Scratch with Streamlit
+- スクラッチで、RAG構築（クラウド版＆ローカル-Qdrant版）
 
 ## 📚 ドキュメント
 
