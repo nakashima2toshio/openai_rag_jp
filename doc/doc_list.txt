@@ -33,6 +33,27 @@ README.md を最新版に、かつ以下の資料を統合した資料にアッ�
   doc/helper_rag.md
   doc/helper_st.md
 
+ーーーーーーーーーーーーーーーーーーーーーー
+  [docker-compose]
+  docker-compose/docker-compose.yml
+
+  [setup]
+  server.py
+  setup.py
+
+  [工程]
+  a01_load_set_rag_data.py
+  a02_set_vector_store_vsid.py
+  a10_show_qdrant_data.py
+  a20_rag_search_cloud_vs.py
+  a50_qdrant_registration.py
+  a50_rag_search_local_qdrant.py
+
+  [common]
+  config_yml.yml
+  helper_api.py
+  helper_rag.py
+  helper_st.py
 
 ------------------------------------
 old_code/a00_dl_dataset_from_huggingface.py
