@@ -359,11 +359,13 @@ def get_current_vector_stores(force_refresh: bool = False) -> Tuple[Dict[str, st
     return stores, store_list
 
 
-# 言語設定
-LANGUAGE_OPTIONS = {
-    "English": "en",
-    "日本語" : "ja"
-}
+# helper_ragからモデル関連のインポート
+try:
+    from helper_rag import AppConfig, select_model, show_model_info
+    HELPER_AVAILABLE = True
+except ImportError as e:
+    HELPER_AVAILABLE = False
+    logger.warning(f"ヘルパーモジュールのインポートに失敗: {e}")
 
 # テスト用質問（英語版 - RAGデータに最適化）
 test_questions_en = [
@@ -398,38 +400,7 @@ test_questions_4_en = [
     "What is the scope of application of consumer protection law?"
 ]
 
-# テスト用質問（日本語版 - オプション）
-test_questions_ja = [
-    "新規アカウントを作るにはどうすればよいですか？",
-    "どのような決済方法が利用できますか？",
-    "商品を返品することはできますか？",
-    "パスワードを忘れてしまいました",
-    "サポートチームに連絡する方法を教えてください"
-]
-
-test_questions_2_ja = [
-    "人工知能の最新動向について教えてください",
-    "量子コンピューティングの原理とは？",
-    "再生可能エネルギーの種類と特徴",
-    "遺伝子編集技術の現状と課題",
-    "宇宙探査の最新技術について"
-]
-
-test_questions_3_ja = [
-    "高血圧の予防方法について",
-    "糖尿病の症状と治療法",
-    "心臓病のリスクファクター",
-    "健康的な食事のガイドライン",
-    "運動と健康の関係について"
-]
-
-test_questions_4_ja = [
-    "契約書の重要な条項について",
-    "知的財産権の保護方法",
-    "労働法の基本原則",
-    "個人情報保護法の概要",
-    "消費者保護法の適用範囲"
-]
+# 日本語テスト質問は削除（英語のみ使用）
 
 # OpenAI APIキーの設定（環境変数から自動取得）
 try:
@@ -463,6 +434,7 @@ class ModernRAGManager:
             max_results = kwargs.get('max_results', 20)
             include_results = kwargs.get('include_results', True)
             filters = kwargs.get('filters', None)
+            selected_model = kwargs.get('selected_model', 'gpt-4o-mini')  # モデル選択を受け取る
 
             # 型安全な辞書更新
             if max_results and isinstance(max_results, int):
@@ -476,9 +448,9 @@ class ModernRAGManager:
                 include_params.append("file_search_call.results")
 
             # Responses API呼び出し（型安全な方法）
-            # OpenAI SDKの型定義が厳密なため、実際の動作に問題がない場合は型チェックを無視
+            # 選択されたモデルを使用
             response = openai_client.responses.create(
-                model="gpt-4o-mini",
+                model=selected_model,
                 input=query,
                 tools=[file_search_tool_dict],  # type: ignore[arg-type]
                 include=include_params if include_params else None
@@ -496,7 +468,7 @@ class ModernRAGManager:
                 "store_id"  : store_id,
                 "query"     : query,
                 "timestamp" : datetime.now().isoformat(),
-                "model"     : "gpt-4o-mini",
+                "model"     : selected_model,  # 選択されたモデルを記録
                 "method"    : "responses_api_file_search",
                 "citations" : citations,
                 "tool_calls": self._extract_tool_calls(response)
@@ -686,8 +658,8 @@ def initialize_session_state():
         # 動的に最初のVector Storeを選択
         _, store_list = get_current_vector_stores()
         st.session_state.selected_store = store_list[0] if store_list else "Customer Support FAQ"
-    if 'selected_language' not in st.session_state:
-        st.session_state.selected_language = "English"  # デフォルトは英語（RAGデータに合わせて）
+    if 'selected_model' not in st.session_state:
+        st.session_state.selected_model = AppConfig.DEFAULT_MODEL if HELPER_AVAILABLE else "gpt-4o-mini"  # デフォルトモデル
     if 'use_agent_sdk' not in st.session_state:
         st.session_state.use_agent_sdk = False  # デフォルトはResponses API直接使用
     if 'search_options' not in st.session_state:
@@ -742,77 +714,52 @@ def get_selected_store_index(selected_store: str, store_list: List[str]) -> int:
         return 0  # デフォルトは最初のインデックス
 
 
-def get_test_questions_by_store(store_name: str, language: str) -> List[str]:
-    """Vector Storeに応じたテスト質問を取得（動的対応）"""
-    # 動的なVector Storeに対応するための柔軟なマッピング
+def get_test_questions_by_store(store_name: str) -> List[str]:
+    """Vector Storeに応じたテスト質問を取得（英語のみ）"""
+    # 動的なVector Storeに対応するためのマッピング（英語のみ）
     store_question_mapping = {
-        # Customer Support FAQ系
-        ("Customer Support FAQ", "English")    : test_questions_en,
-        ("Customer Support FAQ", "日本語")     : test_questions_ja,
-
-        # Science & Technology系
-        ("Science & Technology Q&A", "English"): test_questions_2_en,
-        ("Science & Technology Q&A", "日本語") : test_questions_2_ja,
-
-        # Medical系
-        ("Medical Q&A", "English")             : test_questions_3_en,
-        ("Medical Q&A", "日本語")              : test_questions_3_ja,
-
-        # Legal系
-        ("Legal Q&A", "English")               : test_questions_4_en,
-        ("Legal Q&A", "日本語")                : test_questions_4_ja,
+        "Customer Support FAQ"    : test_questions_en,
+        "Science & Technology Q&A": test_questions_2_en,
+        "Medical Q&A"             : test_questions_3_en,
+        "Legal Q&A"               : test_questions_4_en,
     }
 
     # 完全一致確認
-    key = (store_name, language)
-    if key in store_question_mapping:
-        return store_question_mapping[key]
+    if store_name in store_question_mapping:
+        return store_question_mapping[store_name]
 
     # 部分一致確認（柔軟対応）
-    for (mapped_store, mapped_lang), questions in store_question_mapping.items():
-        if (mapped_lang == language and
-                (mapped_store.lower() in store_name.lower() or
-                 any(word in store_name.lower() for word in mapped_store.lower().split()))):
+    for mapped_store, questions in store_question_mapping.items():
+        if (mapped_store.lower() in store_name.lower() or
+                any(word in store_name.lower() for word in mapped_store.lower().split())):
             return questions
 
     # デフォルト（Customer Support FAQ）
-    default_key = ("Customer Support FAQ", language)
-    return store_question_mapping.get(default_key, test_questions_en)
+    return test_questions_en
 
 
 def display_test_questions():
     """テスト用質問の表示（動的Vector Store対応）"""
-    # 現在選択されているVector Storeと言語を取得
+    # 現在選択されているVector Storeを取得
     selected_store = st.session_state.get('selected_store', 'Customer Support FAQ')
-    selected_language = st.session_state.get('selected_language', 'English')
 
     # 対応する質問を取得
-    questions = get_test_questions_by_store(selected_store, selected_language)
+    questions = get_test_questions_by_store(selected_store)
 
     # ヘッダーの動的生成
-    if selected_language == "English":
-        header = f"Test Questions ({selected_store})"
-    else:
-        header = f"テスト用質問（{selected_store}）"
-
+    header = f"Test Questions ({selected_store})"
     st.header(f"💡 {header}")
 
     # RAGデータが英語の場合の注意書き
-    if selected_language == "日本語":
-        st.warning("⚠️ RAGデータは英語で作成されています。英語での質問をお勧めします。")
-    else:
-        st.success("✅ 英語質問（RAGデータに最適化）")
+    st.success("✅ 英語質問（RAGデータに最適化）")
 
     if not questions:
-        if selected_language == "English":
-            st.info("No test questions available for this Vector Store")
-        else:
-            st.info("このVector Storeに対応するテスト質問がありません")
+        st.info("No test questions available for this Vector Store")
         return
 
     # 質問ボタンの表示
     for i, question in enumerate(questions):
-        button_key = f"test_q_{selected_store}_{selected_language}_{i}_{hash(question)}"
+        button_key = f"test_q_{selected_store}_{i}_{hash(question)}"
         if st.button(f"Q{i + 1}: {question}", key=button_key):
             st.session_state.current_query = question
             st.session_state.selected_store = selected_store
@@ -896,18 +843,12 @@ def display_system_info():
         # Vector Store連動情報
         st.write("**設定情報:**")
         selected_store = st.session_state.get('selected_store', 'Customer Support FAQ')
-        selected_language = st.session_state.get('selected_language', 'English')
+        selected_model = st.session_state.get('selected_model', 'gpt-4o-mini')
 
         st.write(f"- 選択Vector Store: {selected_store}")
-        st.write(f"- 言語: {selected_language}")
+        st.write(f"- 選択モデル: {selected_model}")
         st.write(f"- Agent SDK使用: {'有効' if st.session_state.get('use_agent_sdk', False) else '無効'}")
         st.write(f"- 自動更新: {'有効' if st.session_state.get('auto_refresh_stores', True) else '無効'}")
-
-        # RAG最適化情報
-        if selected_language == "English":
-            st.write("- 🎯 RAG最適化: ✅")
-        else:
-            st.write("- ⚠️ RAG最適化: 言語不一致")
 
 
 def display_search_options():
@@ -1089,22 +1030,50 @@ def main():
             st.error("❌ 利用可能なVector Storeがありません")
             st.stop()
 
-        # 言語選択
+        # モデル選択
         st.markdown("---")
-        selected_language = st.selectbox(
-            "Test Question Language",
-            options=list(LANGUAGE_OPTIONS.keys()),
-            index=list(LANGUAGE_OPTIONS.keys()).index(st.session_state.selected_language),
-            key="language_selection",
-            help="英語質問はRAGデータに最適化されています"
-        )
-        st.session_state.selected_language = selected_language
-
-        # 言語に応じた推奨表示
-        if selected_language == "English":
-            st.success("✅ Optimized for English RAG data")
+        st.subheader("🤖 モデル選択")
+        
+        if HELPER_AVAILABLE:
+            # helper_ragのselect_model関数をサイドバー外で使用
+            models = AppConfig.AVAILABLE_MODELS
+            default_model = st.session_state.get('selected_model', AppConfig.DEFAULT_MODEL)
+            
+            try:
+                default_index = models.index(default_model)
+            except ValueError:
+                default_index = 0
+            
+            selected_model = st.selectbox(
+                "使用モデル",
+                models,
+                index=default_index,
+                key="model_selection",
+                help="RAG検索に使用するOpenAIモデルを選択してください"
+            )
+            st.session_state.selected_model = selected_model
+            
+            # モデル情報表示
+            limits = AppConfig.get_model_limits(selected_model)
+            pricing = AppConfig.get_model_pricing(selected_model)
+            
+            st.info(f"""
+            📄 **{selected_model}**
+            - 最大トークン: {limits['max_tokens']:,}
+            - 最大出力: {limits['max_output']:,}
+            - 料金: ${pricing['input']:.4f} / ${pricing['output']:.4f} (input/output per 1K tokens)
+            """)
         else:
-            st.warning("⚠️ RAGデータは英語です")
+            # フォールバック：シンプルなモデル選択
+            models = ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"]
+            selected_model = st.selectbox(
+                "使用モデル",
+                models,
+                index=models.index(st.session_state.get('selected_model', 'gpt-4o-mini')),
+                key="model_selection",
+                help="RAG検索に使用するOpenAIモデルを選択してください"
+            )
+            st.session_state.selected_model = selected_model
 
         # 検索オプション
         display_search_options()
@@ -1138,13 +1107,19 @@ def main():
         with col_center:
             submitted = st.form_submit_button("🔍 検索実行", type="primary", use_container_width=True)
     
-    # 日本語の質問例を追加
+    # 質問例を追加
     with st.expander("💡 質問例", expanded=False):
-        st.markdown("**日本語での質問例:**")
-        example_question = "新規アカウントは、どう作成すればよいか？　日本語で回答してください。"
-        if st.button(f"📝 {example_question}", use_container_width=True):
-            st.session_state.current_query = example_question
-            st.rerun()
+        st.markdown("**質問例:**")
+        example_questions = [
+            "How can I create an account?",
+            "新規アカウントは、どう作成すればよいか？　日本語で回答してください。",
+            "What are the symptoms of diabetes?",
+            "What is quantum computing?"
+        ]
+        for example_question in example_questions:
+            if st.button(f"📝 {example_question}", use_container_width=True, key=f"example_{hash(example_question)}"):
+                st.session_state.current_query = example_question
+                st.rerun()
 
     # 検索結果表示部分
     if submitted and query.strip():
@@ -1162,14 +1137,15 @@ def main():
                 # 検索オプションの取得
                 search_options = st.session_state.search_options
 
-                # 検索実行（store_idも渡す）
+                # 検索実行（store_idと選択されたモデルを渡す）
                 final_result, final_metadata = rag_manager.search(
                     query,
                     selected_store,
                     selected_store_id,
                     use_agent_sdk=st.session_state.use_agent_sdk,
                     max_results=search_options['max_results'],
-                    include_results=search_options['include_results']
+                    include_results=search_options['include_results'],
+                    selected_model=st.session_state.selected_model  # 選択されたモデルを渡す
                 )
 
                 # 結果表示
