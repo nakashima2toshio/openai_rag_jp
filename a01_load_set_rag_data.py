@@ -499,12 +499,32 @@ def main():
             st.subheader("📝 テキスト結合設定")
             
             # データセット固有のカラム結合設定
-            if selected_dataset == "medical_qa" and 'Complex_CoT' in df.columns:
+            if selected_dataset == "medical_qa":
+                # 実際のカラム名を大文字小文字を無視して検索
+                actual_columns = []
+                medical_columns_map = {}
+                for col in df.columns:
+                    col_lower = col.lower()
+                    if 'question' in col_lower:
+                        actual_columns.append(col)
+                        medical_columns_map['Question'] = col
+                    elif 'complex_cot' in col_lower or 'cot' in col_lower:
+                        actual_columns.append(col)
+                        medical_columns_map['Complex_CoT'] = col
+                    elif 'response' in col_lower:
+                        actual_columns.append(col)
+                        medical_columns_map['Response'] = col
+                
+                # デフォルト値の設定
+                if dataset_specific_options.get('include_cot', True) and 'Complex_CoT' in medical_columns_map:
+                    default_cols = list(medical_columns_map.values())
+                else:
+                    default_cols = [v for k, v in medical_columns_map.items() if k != 'Complex_CoT']
+                
                 combine_columns = st.multiselect(
                     "結合するカラムを選択",
-                    options=['Question', 'Complex_CoT', 'Response'],
-                    default=['Question', 'Complex_CoT', 'Response'] if dataset_specific_options.get('include_cot', True) 
-                            else ['Question', 'Response']
+                    options=actual_columns,
+                    default=default_cols if default_cols else actual_columns
                 )
             elif selected_dataset == "sciq_qa":
                 available_cols = ['question', 'correct_answer']
@@ -554,10 +574,16 @@ def main():
                     # Combined_Textカラムが既に存在する場合は、セパレータを適用して上書き
                     # (process_rag_data関数でCombined_Textが作成されているため)
                     if combine_columns and 'Combined_Text' in df_processed.columns:
-                        # 元のデータフレームから選択されたカラムを結合
-                        df_processed['Combined_Text'] = df[combine_columns].apply(
-                            lambda row: separator.join(row.dropna().astype(str)), axis=1
-                        )
+                        # 選択されたカラムが実際に存在するか確認
+                        missing_cols = [col for col in combine_columns if col not in df.columns]
+                        if missing_cols:
+                            st.error(f"❌ 選択されたカラムが見つかりません: {missing_cols}")
+                            st.info(f"利用可能なカラム: {list(df.columns)}")
+                        else:
+                            # 元のデータフレームから選択されたカラムを結合
+                            df_processed['Combined_Text'] = df[combine_columns].apply(
+                                lambda row: separator.join(row.dropna().astype(str)), axis=1
+                            )
                     
                     # 結果を保存
                     st.session_state['processed_data'] = df_processed

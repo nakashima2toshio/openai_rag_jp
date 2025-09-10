@@ -1,0 +1,53 @@
+# PyCharm Professional Memory Configuration for 24GB RAM MacBook Air
+# 最適化設定 2025年版
+
+# 初期ヒープサイズ（4GB）
+-Xms4096m
+
+# 最大ヒープサイズ（12GB - RAMの50%）
+-Xmx12288m
+
+# 予約コードキャッシュサイズ（1GB）
+-XX:ReservedCodeCacheSize=1024m
+
+# ソフト参照のLRUポリシー（メモリ圧迫時の解放を早める）
+-XX:SoftRefLRUPolicyMSPerMB=50
+
+# G1GCの使用（最新の推奨GC）
+-XX:+UseG1GC
+
+# G1GCの最大停止時間目標（200ms）
+-XX:MaxGCPauseMillis=200
+
+# GCスレッド数の制限
+-XX:ConcGCThreads=4
+
+# メタスペースの初期サイズ
+-XX:MetaspaceSize=512m
+
+# メタスペースの最大サイズ
+-XX:MaxMetaspaceSize=2048m
+
+# ダイレクトメモリの最大サイズ
+-XX:MaxDirectMemorySize=2048m
+
+# パフォーマンス最適化
+-XX:+AlwaysPreTouch
+-XX:+UseStringDeduplication
+-XX:+UseCompressedOops
+
+# JDKの内部APIアクセス許可（PyCharm用）
+--add-opens=java.base/java.io=ALL-UNNAMED
+--add-opens=java.base/java.lang=ALL-UNNAMED
+--add-opens=java.base/java.util=ALL-UNNAMED
+--add-opens=java.desktop/java.awt=ALL-UNNAMED
+--add-opens=java.desktop/javax.swing=ALL-UNNAMED
+
+# ファイルエンコーディング
+-Dfile.encoding=UTF-8
+
+# IDE固有の最適化
+-Didea.max.content.load.filesize=20000
+-Didea.max.intellisense.filesize=2500
+-Didea.cache.size=2048
+-Didea.cycle.buffer.size=2048
