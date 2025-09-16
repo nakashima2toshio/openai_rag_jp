@@ -133,6 +133,16 @@ class RAGConfig:
             "description"     : "法律・判例質問回答データセット",
             "combine_template": "{question} {answer}",
             "port"            : 8505
+        },
+        
+        # TriviaQA
+        "trivia_qa"           : {
+            "name"            : "雑学QA（TriviaQA）",
+            "icon"            : "🎯",
+            "required_columns": ["question", "answer"],
+            "description"     : "雑学質問回答データセット",
+            "combine_template": "{question} {answer} {entity_pages} {search_results}",
+            "port"            : 8506
         }
     }
 

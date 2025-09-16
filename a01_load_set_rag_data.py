@@ -262,6 +262,23 @@ def main():
                 value=False,
                 help="判例の事件名を統一形式に正規化します"
             )
+            
+        elif selected_dataset == "trivia_qa":
+            dataset_specific_options['include_entity_pages'] = st.checkbox(
+                "エンティティページを含める",
+                value=True,
+                help="Wikipediaなどのエンティティページ情報を含めます"
+            )
+            dataset_specific_options['include_search_results'] = st.checkbox(
+                "検索結果を含める",
+                value=True,
+                help="検索結果（コンテキスト）を含めます"
+            )
+            dataset_specific_options['preserve_formatting'] = st.checkbox(
+                "フォーマットを保持",
+                value=True,
+                help="テキストのフォーマットを保持します"
+            )
     
     # メインコンテンツ
     setup_page_header(selected_dataset)
@@ -332,7 +349,8 @@ def main():
             "customer_support_faq": "MakTek/Customer_support_faqs_dataset",
             "medical_qa": "FreedomIntelligence/medical-o1-reasoning-SFT",
             "sciq_qa": "sciq",
-            "legal_qa": "nguha/legalbench"
+            "legal_qa": "nguha/legalbench",
+            "trivia_qa": "trivia_qa"  # TriviaQA用のデフォルト追加
         }
         
         dataset_name = st.text_input(
@@ -355,7 +373,8 @@ def main():
                 # データセット固有のconfig設定
                 config_mapping = {
                     "medical_qa": "en",  # 医療データセット用
-                    "legal_qa": "consumer_contracts_qa"  # 法律データセット用
+                    "legal_qa": "consumer_contracts_qa",  # 法律データセット用
+                    "trivia_qa": "rc"  # TriviaQA用 (Reading Comprehension)
                 }
                 
                 # configパラメータの決定（nameパラメータとして渡す）
@@ -363,12 +382,101 @@ def main():
                 
                 # データセットをロード
                 with st.spinner(f"HuggingFaceから{dataset_name}をダウンロード中..."):
-                    if config_param:
+                    if selected_dataset == "trivia_qa":
+                        # TriviaQA用の特別な処理
+                        dataset = hf_load_dataset(dataset_name, config_param, split=split_name)
+                        # データを辞書形式からDataFrameに変換
+                        data_list = []
+                        for i, item in enumerate(dataset):
+                            if i >= sample_size:
+                                break
+                            # TriviaQAのデータ構造に応じて必要なフィールドを抽出
+                            record = {
+                                'question_id': item.get('question_id', ''),
+                                'question': item.get('question', ''),
+                                'answer': '',  # answerは辞書型なので後で処理
+                                'entity_pages': '',  # entity_pagesは辞書型なので後で処理
+                                'search_results': ''  # search_resultsは辞書型なので後で処理
+                            }
+                            
+                            # answerフィールドの処理
+                            if 'answer' in item and item['answer']:
+                                answer_data = item['answer']
+                                if isinstance(answer_data, dict):
+                                    # 正規化された値を優先
+                                    if 'normalized_value' in answer_data and answer_data['normalized_value']:
+                                        record['answer'] = answer_data['normalized_value']
+                                    elif 'value' in answer_data:
+                                        record['answer'] = answer_data['value']
+                                    elif 'aliases' in answer_data and answer_data['aliases']:
+                                        record['answer'] = answer_data['aliases'][0] if isinstance(answer_data['aliases'], list) else str(answer_data['aliases'])
+                                else:
+                                    record['answer'] = str(answer_data)
+                            
+                            # entity_pagesフィールドの処理
+                            if 'entity_pages' in item and item['entity_pages']:
+                                pages = item['entity_pages']
+                                if isinstance(pages, dict):
+                                    # 辞書の値からタイトルを抽出
+                                    titles = []
+                                    for key, page in list(pages.items())[:3]:  # 最初の3つ
+                                        if isinstance(page, dict) and 'title' in page:
+                                            titles.append(page['title'])
+                                        elif isinstance(page, str):
+                                            titles.append(page)
+                                    record['entity_pages'] = ' | '.join(titles)
+                                elif isinstance(pages, list):
+                                    # リストの場合
+                                    titles = []
+                                    for page in pages[:3]:
+                                        if isinstance(page, dict) and 'title' in page:
+                                            titles.append(page['title'])
+                                        elif isinstance(page, str):
+                                            titles.append(page)
+                                    record['entity_pages'] = ' | '.join(titles)
+                            
+                            # search_resultsフィールドの処理
+                            if 'search_results' in item and item['search_results']:
+                                results = item['search_results']
+                                if isinstance(results, dict):
+                                    # 辞書の値から検索結果を抽出
+                                    contexts = []
+                                    for key, result in list(results.items())[:2]:  # 最初の2つ
+                                        if isinstance(result, dict):
+                                            context = result.get('search_context', result.get('description', ''))
+                                            if context and len(context) > 500:
+                                                context = context[:500] + '...'
+                                            if context:
+                                                contexts.append(context)
+                                        elif isinstance(result, str):
+                                            context = result[:500] + '...' if len(result) > 500 else result
+                                            contexts.append(context)
+                                    record['search_results'] = ' '.join(contexts)
+                                elif isinstance(results, list):
+                                    # リストの場合
+                                    contexts = []
+                                    for result in results[:2]:
+                                        if isinstance(result, dict):
+                                            context = result.get('search_context', result.get('description', ''))
+                                            if context and len(context) > 500:
+                                                context = context[:500] + '...'
+                                            if context:
+                                                contexts.append(context)
+                                        elif isinstance(result, str):
+                                            context = result[:500] + '...' if len(result) > 500 else result
+                                            contexts.append(context)
+                                    record['search_results'] = ' '.join(contexts)
+                            
+                            data_list.append(record)
+                        
+                        df = pd.DataFrame(data_list)
+                        
+                    elif config_param:
                         dataset = hf_load_dataset(dataset_name, name=config_param, split=split_name)
+                        df = dataset.to_pandas().head(sample_size) if hasattr(dataset, 'to_pandas') else pd.DataFrame(dataset[:sample_size])
                     else:
                         dataset = hf_load_dataset(dataset_name, split=split_name)
-                    
-                    df = dataset.to_pandas().head(sample_size) if hasattr(dataset, 'to_pandas') else pd.DataFrame(dataset[:sample_size])
+                        df = dataset.to_pandas().head(sample_size) if hasattr(dataset, 'to_pandas') else pd.DataFrame(dataset[:sample_size])
                 
                 # datasetsフォルダに保存
                 if df is not None:
@@ -538,6 +646,30 @@ def main():
                     "結合するカラムを選択",
                     options=available_cols,
                     default=available_cols[:2]  # デフォルトは question と correct_answer
+                )
+            elif selected_dataset == "trivia_qa":
+                # TriviaQA用のカラム設定
+                available_cols = []
+                if 'question' in df.columns:
+                    available_cols.append('question')
+                if 'answer' in df.columns:
+                    available_cols.append('answer')
+                if 'entity_pages' in df.columns and dataset_specific_options.get('include_entity_pages', True):
+                    available_cols.append('entity_pages')
+                if 'search_results' in df.columns and dataset_specific_options.get('include_search_results', True):
+                    available_cols.append('search_results')
+                
+                # デフォルトは全カラムを選択
+                default_cols = ['question', 'answer']
+                if 'entity_pages' in df.columns:
+                    default_cols.append('entity_pages')
+                if 'search_results' in df.columns:
+                    default_cols.append('search_results')
+                    
+                combine_columns = st.multiselect(
+                    "結合するカラムを選択",
+                    options=available_cols,
+                    default=[col for col in default_cols if col in available_cols]
                 )
             else:
                 combine_columns = st.multiselect(

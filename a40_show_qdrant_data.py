@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-a10_show_qdrant_data.py - Qdrantデータ表示ツール
+a40_show_qdrant_data.py - Qdrantデータ表示ツール
 =============================================================
-起動: streamlit run a10_show_qdrant_data.py --server.port=8502
+起動: streamlit run a40_show_qdrant_data.py --server.port=8502
 
 【主要機能】
 ✅ Qdrantサーバーの接続状態チェック
@@ -423,14 +423,111 @@ def main():
         elif "Info" in df_collections.columns:
             st.info(df_collections.iloc[0]["Info"])
         elif "Error" in df_collections.columns:
-            st.error(f"エラー: {df_collections.iloc[0]['Error']}")
+            error_msg = df_collections.iloc[0]['Error']
+            
+            # より詳細なエラーメッセージを表示
+            if "Connection refused" in error_msg or "[Errno 61]" in error_msg:
+                st.error("❌ Qdrantサーバーに接続できません")
+                st.warning(
+                    "**原因:** Qdrantサーバーが起動していない可能性があります。\n\n"
+                    "**解決方法:**\n\n"
+                    "### 🚀 方法1: 自動セットアップ（推奨）\n"
+                    "```bash\n"
+                    "# セットアップスクリプトでQdrantを起動\n"
+                    "python setup.py\n"
+                    "# または\n"
+                    "python server.py\n"
+                    "```\n\n"
+                    "### 🐳 方法2: 手動でDocker起動\n"
+                    "**ステップ1: Docker Desktopを起動**\n"
+                    "- macOS: アプリケーションフォルダからDocker Desktopを起動\n"
+                    "- 確認: `docker version`\n\n"
+                    "**ステップ2: Qdrantを起動**\n"
+                    "```bash\n"
+                    "cd docker-compose\n"
+                    "docker-compose up -d qdrant\n"
+                    "```\n\n"
+                    "**ステップ3: 動作確認**\n"
+                    "```bash\n"
+                    "docker-compose ps\n"
+                    "# Qdrantが'Up'状態であることを確認\n"
+                    "```\n\n"
+                    "### 🔧 トラブルシューティング:\n"
+                    "- ポート使用中: `lsof -i :6333`\n"
+                    "- ログ確認: `docker-compose logs qdrant`\n"
+                    "- 再起動: `docker-compose restart qdrant`"
+                )
+                if st.session_state.debug_mode:
+                    with st.expander("🔍 詳細エラー情報", expanded=False):
+                        st.error(f"詳細エラー: {error_msg}")
+                        st.caption(f"接続先: {QDRANT_CONFIG['host']}:{QDRANT_CONFIG['port']}")
+                        st.info("docker-compose.ymlの場所: `docker-compose/docker-compose.yml`")
+            elif "timeout" in error_msg.lower():
+                st.error("⏱️ Qdrantサーバーへの接続がタイムアウトしました")
+                st.warning(
+                    "**原因:** サーバーが応答していないか、ネットワークの問題があります。\n\n"
+                    "**解決方法:**\n"
+                    "• Qdrantサーバーのログを確認してください\n"
+                    "• ファイアウォール設定を確認してください\n"
+                    "• ポート6333が使用可能か確認してください"
+                )
+            else:
+                st.error(f"エラー: {error_msg}")
+                st.info("Qdrantサーバーが正しく起動していることを確認してください")
         else:
             st.info("コレクションが見つかりません")
             
     except Exception as e:
-        st.error(f"Qdrant接続エラー: {str(e)}")
-        st.info("Qdrantサーバーが起動していることを確認してください")
-        st.code("docker run -p 6333:6333 qdrant/qdrant", language="bash")
+        error_msg = str(e)
+        
+        # より詳細なエラーメッセージを表示
+        if "Connection refused" in error_msg or "[Errno 61]" in error_msg:
+            st.error("❌ Qdrantサーバーに接続できません")
+            st.warning(
+                "**原因:** Qdrantサーバーが起動していない可能性があります。\n\n"
+                "**解決方法:**\n\n"
+                "### 🚀 方法1: 自動セットアップ（推奨）\n"
+                "```bash\n"
+                "# セットアップスクリプトでQdrantを起動\n"
+                "python setup.py\n"
+                "# または\n"
+                "python server.py\n"
+                "```\n\n"
+                "### 🐳 方法2: 手動でDocker起動\n"
+                "**ステップ1: Docker Desktopを起動**\n"
+                "- macOS: アプリケーションフォルダからDocker Desktopを起動\n"
+                "- 確認: `docker version`\n\n"
+                "**ステップ2: Qdrantを起動**\n"
+                "```bash\n"
+                "cd docker-compose\n"
+                "docker-compose up -d qdrant\n"
+                "```\n\n"
+                "**ステップ3: 動作確認**\n"
+                "```bash\n"
+                "docker-compose ps\n"
+                "# Qdrantが'Up'状態であることを確認\n"
+                "```\n\n"
+                "### 🔧 トラブルシューティング:\n"
+                "- ポート使用中: `lsof -i :6333`\n"
+                "- ログ確認: `docker-compose logs qdrant`\n"
+                "- 再起動: `docker-compose restart qdrant`"
+            )
+            if debug_mode:
+                with st.expander("🔍 詳細エラー情報", expanded=False):
+                    st.error(f"詳細エラー: {error_msg}")
+                    st.info("docker-compose.ymlの場所: `docker-compose/docker-compose.yml`")
+        elif "timeout" in error_msg.lower():
+            st.error("⏱️ Qdrantサーバーへの接続がタイムアウトしました")
+            st.warning(
+                "**原因:** サーバーが応答していないか、ネットワークの問題があります。\n\n"
+                "**解決方法:**\n"
+                "• Qdrantサーバーのログを確認してください\n"
+                "• ファイアウォール設定を確認してください\n"
+                "• ポート6333が使用可能か確認してください"
+            )
+        else:
+            st.error(f"Qdrant接続エラー: {error_msg}")
+            st.info("Qdrantサーバーが正しく起動していることを確認してください")
     
     # フッター
     st.divider()

@@ -1,4 +1,4 @@
-# streamlit run a03_rag_search_cloud_vs.py --server.port=8501
+# streamlit run a03_rag_search_cloud_vs.py --server.port=8503
 # a03_rag_search_cloud_vs.py - 最新OpenAI Responses API完全対応版（動的Vector Store対応・重複問題修正版）
 # OpenAI Responses API + file_search ツール + 環境変数APIキー対応 + 動的Vector Store ID管理
 """
@@ -79,10 +79,11 @@ class VectorStoreManager:
 
     # デフォルトのVector Store設定（フォールバック用）
     DEFAULT_VECTOR_STORES = {
-        "Customer Support FAQ"    : "vs_687a0604f1508191aaf416d88e266ab7",
-        "Science & Technology Q&A": "vs_687a061acc908191af7d5d9ba623470b",
-        "Medical Q&A"             : "vs_687a060f9ed881918b213bfdeab8241b",
-        "Legal Q&A"               : "vs_687a062418ec8191872efdbf8f554836"
+        "Customer Support FAQ"    : "vs_68c94da49c80819189dd42d6e941c4b5",
+        "Science & Technology Q&A": "vs_68c94db932fc8191b6e17f86e6601bc1",
+        "Medical Q&A"             : "vs_68c94daffc708191b3c561f4dd6b2af8",
+        "Legal Q&A"               : "vs_68c94dc1cc008191a197bdbc3947a67b",
+        "Trivia Q&A"              : "vs_68c94dc9e6b08191946d7cafcd9880a3"
     }
 
     # a30_020_make_vsid.py のVectorStoreConfigと対応するマッピング
@@ -90,7 +91,8 @@ class VectorStoreManager:
         "customer_support_faq": "Customer Support FAQ Knowledge Base",
         "medical_qa"          : "Medical Q&A Knowledge Base",
         "sciq_qa"             : "Science & Technology Q&A Knowledge Base",
-        "legal_qa"            : "Legal Q&A Knowledge Base"
+        "legal_qa"            : "Legal Q&A Knowledge Base",
+        "trivia_qa"           : "Trivia Q&A Knowledge Base"
     }
 
     # 表示名への逆マッピング（UI表示用）
@@ -98,7 +100,8 @@ class VectorStoreManager:
         "Customer Support FAQ Knowledge Base"    : "Customer Support FAQ",
         "Medical Q&A Knowledge Base"             : "Medical Q&A",
         "Science & Technology Q&A Knowledge Base": "Science & Technology Q&A",
-        "Legal Q&A Knowledge Base"               : "Legal Q&A"
+        "Legal Q&A Knowledge Base"               : "Legal Q&A",
+        "Trivia Q&A Knowledge Base"              : "Trivia Q&A"
     }
 
     def __init__(self, openai_client: OpenAI = None):

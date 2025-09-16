@@ -20,7 +20,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from openai import OpenAI
 
-# 設定ロード（a50_qdrant_registration.py と同等の最小版）
+# 設定ロード（a30_qdrant_registration.py と同等の最小版）
 DEFAULTS = {
     "rag": {"collection": "qa_corpus"},
     "embeddings": {"primary": {"provider": "openai", "model": "text-embedding-3-small", "dims": 1536}},
@@ -162,8 +162,8 @@ if do_search and query.strip():
             st.code("docker run -p 6333:6333 qdrant/qdrant", language="bash")
         elif "collection" in str(e).lower() and "not found" in str(e).lower():
             st.error(f"❌ コレクション '{collection}' が見つかりません")
-            st.error("先に a50_qdrant_registration.py を実行してデータを登録してください:")
-            st.code("python a50_qdrant_registration.py", language="bash")
+            st.error("先に a30_qdrant_registration.py を実行してデータを登録してください:")
+            st.code("python a30_qdrant_registration.py", language="bash")
         else:
             st.error(f"❌ エラーが発生しました: {str(e)}")
             st.error("エラーの詳細:")

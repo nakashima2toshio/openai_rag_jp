@@ -1,9 +1,9 @@
-# python a50_qdrant_registration.py --recreate --include-answer
+# python a30_qdrant_registration.py --recreate --include-answer
 
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-a50_qdrant_registration.py — helper群・config.yml連携版（単一コレクション＋domain、Named Vectors対応、answer同梱切替）
+a30_qdrant_registration.py — helper群・config.yml連携版（単一コレクション＋domain、Named Vectors対応、answer同梱切替）
 --------------------------------------------------------------------------------
 - 4つのCSV（customer_support_faq.csv, medical_qa.csv, legal_qa.csv, sciq_qa.csv）を単一コレクションに統合
 - payloadに domain を付与し、フィルタ検索が可能
@@ -15,8 +15,8 @@ a50_qdrant_registration.py — helper群・config.yml連携版（単一コレク
 使い方：
   export OPENAI_API_KEY=sk-...
   docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
-  python a50_qdrant_registration.py --recreate
-  python a50_qdrant_registration.py --search "副作用はありますか？" --domain medical --using primary
+  python a30_qdrant_registration.py --recreate
+  python a30_qdrant_registration.py --search "副作用はありますか？" --domain medical --using primary
 
 主要引数：
   --recreate           : コレクション削除→新規作成

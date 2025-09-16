@@ -1,11 +1,12 @@
 {
   "vector_stores": {
-    "Legal Q&A": "vs_68c16caa66808191bac3ed1f9c756e11",
-    "Science & Technology Q&A": "vs_68c16c9f75b48191a11787e36dfa2ae6",
-    "Medical Q&A": "vs_68c16c96fe4881919fdc0079f618d43c",
-    "Customer Support FAQ": "vs_68c16c8b2b90819199d5d963690a4ff5"
+    "Customer Support FAQ": "vs_68c94da49c80819189dd42d6e941c4b5",
+    "Medical Q&A": "vs_68c94daffc708191b3c561f4dd6b2af8",
+    "Science & Technology Q&A": "vs_68c94db932fc8191b6e17f86e6601bc1",
+    "Legal Q&A": "vs_68c94dc1cc008191a197bdbc3947a67b",
+    "Trivia Q&A": "vs_68c94dc9e6b08191946d7cafcd9880a3"
   },
-  "last_updated": "2025-09-10T21:23:48.334757",
-  "source": "a20_rag_search_cloud_vs.py",
+  "last_updated": "2025-09-16T20:50:00.000000",
+  "source": "a03_rag_search_cloud_vs.py",
   "version": "1.1"
 }
