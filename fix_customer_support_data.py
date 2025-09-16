@@ -58,7 +58,7 @@ if __name__ == "__main__":
         print("次のステップ:")
         print("1. streamlit run a02_set_vector_store_vsid.py --server.port=8502")
         print("   でVector Storeを再作成してください")
-        print("2. streamlit run a20_rag_search_cloud_vs.py --server.port=8501")
+        print("2. streamlit run a03_rag_search_cloud_vs.py --server.port=8501")
         print("   でRAG検索をテストしてください")
     else:
         print("\n❌ データ修正に失敗しました")

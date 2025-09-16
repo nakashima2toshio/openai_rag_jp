@@ -1,5 +1,5 @@
-# streamlit run a20_rag_search_cloud_vs.py --server.port=8501
-# a20_rag_search_cloud_vs.py - 最新OpenAI Responses API完全対応版（動的Vector Store対応・重複問題修正版）
+# streamlit run a03_rag_search_cloud_vs.py --server.port=8501
+# a03_rag_search_cloud_vs.py - 最新OpenAI Responses API完全対応版（動的Vector Store対応・重複問題修正版）
 # OpenAI Responses API + file_search ツール + 環境変数APIキー対応 + 動的Vector Store ID管理
 """
 🔍 最新RAG検索アプリケーション（動的Vector Store対応・重複問題修正版）
@@ -13,7 +13,7 @@
    pip install openai-agents
 
 【実行方法】
-streamlit run a20_rag_search_cloud_vs.py --server.port=8501
+streamlit run a03_rag_search_cloud_vs.py --server.port=8501
 
 【主要機能】
 ✅ 最新Responses API使用
@@ -136,7 +136,7 @@ class VectorStoreManager:
             config_data = {
                 "vector_stores": stores,
                 "last_updated" : datetime.now().isoformat(),
-                "source"       : "a20_rag_search_cloud_vs.py",
+                "source"       : "a03_rag_search_cloud_vs.py",
                 "version"      : "1.1"
             }
 
@@ -1235,7 +1235,7 @@ def main():
                 ...
               },
               "last_updated": "2025-01-XX...",
-              "source": "a20_rag_search_cloud_vs.py",
+              "source": "a03_rag_search_cloud_vs.py",
               "version": "1.1"
             }
             ```
@@ -1297,4 +1297,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# streamlit run a20_rag_search_cloud_vs.py --server.port=8501
+# streamlit run a03_rag_search_cloud_vs.py --server.port=8501

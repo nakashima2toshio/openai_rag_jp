@@ -110,6 +110,17 @@ class VectorStoreConfig:
                 max_file_size_mb=25,  # より保守的な制限
                 max_chunks_per_file=6000,  # チャンク数削減
                 csv_text_column="Combined_Text"
+            ),
+            "trivia_qa"           : cls(
+                dataset_type="trivia_qa",
+                filename="preprocessed_trivia_qa_20250916_203308.csv",  # 実際のファイル名に合わせて調整
+                store_name="Trivia Q&A Knowledge Base",
+                description="雑学質問回答データベース",
+                chunk_size=2500,  # 適切なサイズに設定
+                overlap=100,
+                max_file_size_mb=25,
+                max_chunks_per_file=7000,
+                csv_text_column="combined_text"  # TriviaQAでは小文字のcombined_text
             )
         }
 
@@ -627,7 +638,7 @@ class VectorStoreUI:
         process_all = st.sidebar.checkbox(
             "🚀 全データセット一括処理",
             value=False,
-            help="4つのデータセットを一括でVector Store化"
+            help="5つのデータセットを一括でVector Store化"
         )
 
         # APIキー確認
