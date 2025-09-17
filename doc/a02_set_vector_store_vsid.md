@@ -1,15 +1,20 @@
 # a02_set_vector_store_vsid.py 詳細設計書
 
-## 1. 概要書
+## 1. 概要
 
 ### 1.1 プログラム名
-`a02_set_vector_store_vsid.py` - Vector Store作成・管理アプリケーション
+`a02_set_vector_store_vsid.py` - Vector Store作成・管理アプリケーション（完全修正版）
 
 ### 1.2 目的
-OpenAI Vector Store APIを使用して、前処理済みのRAGデータからVector Storeを作成し、管理するStreamlitアプリケーション。複数のデータセットに対応し、エラー処理とサイズ制限管理を完全に実装。
+OpenAI Vector Store APIを使用して、前処理済みのRAGデータ（CSVファイル）からVector Storeを作成し、管理するStreamlitアプリケーション。複数のデータセットに対応し、エラー処理とサイズ制限管理を完全に実装。
 
 ### 1.3 主要機能
-- 4種類のデータセットからのVector Store作成
+- 5種類のデータセットからのVector Store作成
+  - カスタマーサポートFAQ
+  - 医療QA
+  - 科学・技術QA（SciQ）
+  - 法律QA
+  - TriviaQA
 - CSVファイルからのテキストデータ読み込み
 - チャンク分割とサイズ最適化
 - OpenAI Vector Store APIとの連携
@@ -50,7 +55,7 @@ graph TD
     B --> M[Results Display]
     B --> N[Store List Display]
     
-    C --> O[OUTPUT/]
+    C --> O[OUTPUT Directory]
     J --> P[OpenAI Cloud]
     K --> P
 ```
@@ -144,7 +149,7 @@ sequenceDiagram
 
 | クラス名 | 役割 | 主要属性 |
 |---------|------|----------|
-| `VectorStoreConfig` | Vector Store設定管理 | chunk_size, max_file_size_mb, max_chunks_per_file |
+| `VectorStoreConfig` | Vector Store設定管理 | chunk_size, max_file_size_mb, max_chunks_per_file, csv_text_column |
 
 ### 3.2 処理クラス
 
@@ -185,10 +190,11 @@ class VectorStoreConfig:
 ```
 
 データセット別設定：
-- **customer_support_faq**: chunk_size=2000, max_file_size_mb=30
-- **medical_qa**: chunk_size=16000, max_file_size_mb=20（最も厳格）
-- **sciq_qa**: chunk_size=2000, max_file_size_mb=25
-- **legal_qa**: chunk_size=3000, max_file_size_mb=25
+- **customer_support_faq**: chunk_size=2000, max_file_size_mb=30, csv_text_column="Combined_Text"
+- **medical_qa**: chunk_size=16000, max_file_size_mb=20（最も厳格）, csv_text_column="Combined_Text"
+- **sciq_qa**: chunk_size=2000, max_file_size_mb=25, csv_text_column="Combined_Text"
+- **legal_qa**: chunk_size=3000, max_file_size_mb=25, csv_text_column="Combined_Text"
+- **trivia_qa**: chunk_size=2500, max_file_size_mb=25, csv_text_column="combined_text"（小文字）
 
 ### 4.2 VectorStoreProcessor
 
@@ -278,7 +284,7 @@ def create_vector_store_from_jsonl_data(self, jsonl_data: List[Dict], store_name
 ```python
 def process_single_dataset(self, dataset_type: str, output_dir: Path = None) -> Dict[str, Any]:
     """
-    単一データセットの処理
+    単一データセットの処理（完全修正版）
     
     Special Handling for medical_qa:
         - チャンク数制限: 5000
@@ -350,17 +356,23 @@ vector_store_file = client.vector_stores.files.create(
 ```json
 {
     "id": "dataset_type_lineIdx_chunkIdx",
-    "text": "チャンクテキスト",
-    "metadata": {
-        "dataset": "dataset_type",
-        "original_line": 0,
-        "chunk_index": 0,
-        "total_chunks": 1
-    }
+    "text": "チャンクテキスト"
 }
 ```
 
-注意：OpenAI制限により、metadataは文字列として保存される場合がある。
+注意：
+- OpenAI制限により、メタデータはファイルに含めずシンプルな形式で保存
+- メタデータは別途Vector Storeのmetadataフィールドに保存
+
+### 5.4 データセット別ファイル名
+
+| データセットタイプ | CSVファイル名 | テキストカラム名 |
+|-------------------|--------------|----------------|
+| customer_support_faq | preprocessed_customer_support_faq.csv | Combined_Text |
+| medical_qa | preprocessed_medical_qa.csv | Combined_Text |
+| sciq_qa | preprocessed_sciq_qa.csv | Combined_Text |
+| legal_qa | preprocessed_legal_qa.csv | Combined_Text |
+| trivia_qa | preprocessed_trivia_qa_*.csv | combined_text（小文字） |
 
 ## 6. エラーハンドリング
 
@@ -373,6 +385,7 @@ vector_store_file = client.vector_stores.files.create(
 | Chunk Limit Error | チャンク数超過 | データトリミング | 警告メッセージ |
 | API Timeout | 10分超過 | 処理中断 | タイムアウトエラー |
 | Connection Error | ネットワーク障害 | リトライ | 接続エラー表示 |
+| CSV Column Error | 指定カラム不在 | 処理中断 | カラム名エラー表示 |
 
 ### 6.2 医療データ特別処理
 
@@ -420,19 +433,22 @@ logger.info(f"✅ JSONL変換成功: {len(jsonl_data_list)}チャンク作成")
 
 #### 7.2.1 Vector Store作成タブ
 - データセット選択（チェックボックス）
+  - 5つのデータセット対応
 - ファイル存在確認表示
 - 作成実行ボタン
 - 進行状況表示（プログレスバー）
 - 結果表示（成功/失敗）
+- 警告表示（サイズ制限等）
 
 #### 7.2.2 ファイル状況タブ
 - OUTPUTディレクトリ内ファイル一覧
 - ファイルサイズ、更新日時
 - CSVファイル優先表示
+- ディレクトリ詳細情報
 
 #### 7.2.3 既存Store一覧タブ
-- Vector Store一覧テーブル
-- 統計情報（総数、総容量）
+- Vector Store一覧テーブル（最新20件）
+- 統計情報（総数、総容量、総ファイル数）
 - リフレッシュボタン
 
 ### 7.3 処理フロー表示
@@ -460,16 +476,19 @@ with st.spinner(f"🔄 {config.description} を処理中..."):
 | medical_qa | 16000 | チャンク数削減優先 |
 | sciq_qa | 2000 | 質問-回答ペア保持 |
 | legal_qa | 3000 | 条文参照保持 |
+| trivia_qa | 2500 | 中間的なサイズ |
 
 ### 8.2 メモリ管理
 - 一時ファイル使用によるメモリ使用量削減
 - チャンク単位での処理
 - 不要データの即座削除
+- tempfileモジュールによる安全な一時ファイル管理
 
 ### 8.3 API呼び出し最適化
 - バッチ処理なし（OpenAI制限）
 - 待機時間の適切な設定（5秒間隔）
 - 早期エラー検出による無駄な待機回避
+- 最大待機時間10分の設定
 
 ## 9. 使用例
 
@@ -484,6 +503,9 @@ with st.spinner(f"🔄 {config.description} を処理中..."):
 3. データセット選択
    ☑ Customer Support FAQ Knowledge Base
    ☑ Medical Q&A Knowledge Base
+   ☑ Science & Technology Q&A Knowledge Base
+   ☑ Legal Q&A Knowledge Base
+   ☑ Trivia Q&A Knowledge Base
 
 4. Vector Store作成実行
    [🚀 Vector Store作成開始] ボタンクリック
@@ -497,20 +519,28 @@ with st.spinner(f"🔄 {config.description} を処理中..."):
 
 7. JSONダウンロード
    結果をJSONファイルとして保存
+
+8. Vector Store IDの保存
+   Python形式またはテキスト形式でダウンロード
 ```
 
-### 9.2 トラブルシューティング使用例
+### 9.2 一括処理の使用例
 
-```python
-# ファイルサイズエラーの場合
-if "too large" in error_message:
-    # VectorStoreConfigでchunk_sizeを増やす
-    config.chunk_size = 32000  # 倍に増やす
-    
-# チャンク数超過の場合
-if chunks_count > max_chunks:
-    # データのサンプリングを実施
-    sampled_data = data[:max_chunks]
+```
+1. サイドバーで「🚀 全データセット一括処理」をチェック
+
+2. 全データセットのファイル存在確認
+   自動的に5つ全てのデータセットがチェックされる
+
+3. Vector Store作成実行
+   [🚀 Vector Store作成開始] ボタンクリック
+
+4. 順次処理の進行状況確認
+   各データセットの処理状況が個別に表示
+
+5. 結果の一括確認
+   成功/失敗の統計情報表示
+   警告詳細の確認
 ```
 
 ## 10. トラブルシューティング
@@ -524,6 +554,7 @@ if chunks_count > max_chunks:
 | タイムアウト | 大量データ処理 | データ量を減らすか分割処理 |
 | API Key エラー | 環境変数未設定 | export OPENAI_API_KEY実行 |
 | ファイル不在エラー | a01未実行 | a01_load_set_rag_data.py実行 |
+| カラム名エラー | CSVカラム名不一致 | CSVファイルのカラム名確認 |
 
 ### 10.2 デバッグ方法
 
@@ -537,6 +568,10 @@ with st.expander("🔍 デバッグ情報", expanded=True):
 
 # API レスポンス確認
 logger.debug(f"API Response: {response}")
+
+# CSVカラム確認
+df = pd.read_csv(filepath)
+logger.info(f"Available columns: {df.columns.tolist()}")
 ```
 
 ## 11. セキュリティ考慮事項
@@ -547,13 +582,13 @@ logger.debug(f"API Response: {response}")
 - APIキー表示時のマスキング
 
 ### 11.2 データセキュリティ
-- 一時ファイルの確実な削除
+- 一時ファイルの確実な削除（finally節での実行）
 - HTTPSによる通信暗号化
 - センシティブデータの警告表示
 
 ### 11.3 アクセス制御
 - ローカルホストのみでの実行推奨
-- ポート番号のカスタマイズ可能
+- ポート番号のカスタマイズ可能（デフォルト: 8502）
 - 認証機能は未実装（必要に応じて追加）
 
 ## 12. 今後の拡張計画
@@ -564,13 +599,16 @@ logger.debug(f"API Response: {response}")
 - [ ] Vector Store編集機能
 - [ ] メタデータ管理強化
 - [ ] 検索テスト機能統合
+- [ ] 追加データセットタイプ対応
 
 ### 12.2 パフォーマンス改善
 - [ ] 並列処理対応
 - [ ] キャッシング機能
 - [ ] 圧縮アルゴリズム導入
+- [ ] チャンクサイズ自動最適化
 
 ### 12.3 運用機能
 - [ ] スケジュール実行
 - [ ] 監視・アラート機能
 - [ ] バックアップ・リストア機能
+- [ ] Vector Store バージョン管理

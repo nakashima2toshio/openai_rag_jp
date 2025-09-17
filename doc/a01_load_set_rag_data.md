@@ -1,6 +1,6 @@
 # a01_load_set_rag_data.py 詳細設計書
 
-## 1. 概要書
+## 1. 概要
 
 ### 1.1 プログラム名
 `a01_load_set_rag_data.py` - 統合RAGデータ処理ツール
@@ -9,11 +9,12 @@
 複数の異なるドメインのデータセットを統一的に処理し、RAG（Retrieval-Augmented Generation）システムで使用可能な形式に変換するStreamlitアプリケーション。
 
 ### 1.3 主要機能
-- 4種類のデータセットタイプの統合処理
+- 5種類のデータセットタイプの統合処理
   - カスタマーサポート・FAQ
   - 医療QAデータ
   - 科学・技術QA（SciQ）
   - 法律・判例QA
+  - TriviaQA（トリビアQA）
 - HuggingFaceからの自動データダウンロード
 - データ検証・品質チェック機能
 - RAG用テキスト結合・前処理
@@ -245,6 +246,23 @@ specific_options:
   - preserve_legal_terms: 法律用語保持
   - preserve_references: 条文参照保持
   - normalize_case_names: 事件名正規化
+```
+
+#### 5.1.5 TriviaQA
+```yaml
+dataset_name: trivia_qa
+config: rc  # Reading Comprehension
+required_columns: [question, answer]
+optional_columns: [entity_pages, search_results]
+text_column: Combined_Text
+specific_options:
+  - include_entity_pages: エンティティページを含める
+  - include_search_results: 検索結果を含める
+  - preserve_formatting: フォーマットを保持
+special_processing:
+  - answer: 辞書型から正規化された値を抽出
+  - entity_pages: 辞書/リストからタイトルを抽出（最大3件）
+  - search_results: 辞書/リストからコンテキストを抽出（最大2件、各500文字）
 ```
 
 ### 5.2 データ処理仕様

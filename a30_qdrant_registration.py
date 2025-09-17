@@ -5,7 +5,8 @@
 """
 a30_qdrant_registration.py — helper群・config.yml連携版（単一コレクション＋domain、Named Vectors対応、answer同梱切替）
 --------------------------------------------------------------------------------
-- 4つのCSV（customer_support_faq.csv, medical_qa.csv, legal_qa.csv, sciq_qa.csv）を単一コレクションに統合
+- 5つのCSV（customer_support_faq.csv, medical_qa.csv, legal_qa.csv, sciq_qa.csv, trivia_qa.csv）を単一コレクションに統合
+- vector_stores.jsonから入力データパスを取得
 - payloadに domain を付与し、フィルタ検索が可能
 - config.yml から埋め込みモデル/入出力設定を読み込み（fallbackあり）
 - answer を埋め込みに含める切替フラグ（--include-answer / YAML設定）
@@ -27,13 +28,16 @@ a30_qdrant_registration.py — helper群・config.yml連携版（単一コレク
   --include-answer     : 埋め込み入力に answer も結合（question + "\n" + answer）
   --using              : Named Vectors のキー名（検索時にどのベクトルで検索するか）
   --search             : クエリ指定で検索のみ実行
-  --domain             : 検索対象を絞る（customer/medical/legal/sciq）
+  --domain             : 検索対象を絞る（customer/medical/legal/sciq/trivia）
   --topk               : 上位件数（既定5）
 """
 import argparse
 import os
+import json
+import glob
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Tuple, Optional, Any
+from pathlib import Path
 
 import pandas as pd
 
@@ -70,13 +74,88 @@ DEFAULTS = {
         # "bge": {"provider": "openai", "model": "text-embedding-3-large", "dims": 3072},
     },
     "paths": {
-        "customer": "OUTPUT/preprocessed_customer_support_faq_89rows_20250721_092004.csv",
-        "medical":  "OUTPUT/preprocessed_medical_qa_19704rows_20250721_092658.csv",
-        "legal":    "OUTPUT/preprocessed_legal_qa_4rows_20250721_100302.csv",
-        "sciq":     "OUTPUT/preprocessed_sciq_qa_11679rows_20250721_095451.csv",
+        "customer": "OUTPUT/preprocessed_customer_support_faq.csv",
+        "medical":  "OUTPUT/preprocessed_medical_qa.csv",
+        "legal":    "OUTPUT/preprocessed_legal_qa.csv",
+        "sciq":     "OUTPUT/preprocessed_sciq_qa.csv",
+        "trivia":   "OUTPUT/preprocessed_trivia_qa.csv",
     },
     "qdrant": {"url": "http://localhost:6333"},
 }
+
+# ------------------ 最新ファイルを動的に検索 ------------------
+def find_latest_file(pattern: str, output_dir: str = "OUTPUT") -> Optional[str]:
+    """
+    指定されたパターンに一致するファイルの中から最新のものを返す
+    """
+    files = glob.glob(os.path.join(output_dir, pattern))
+    if not files:
+        return None
+    
+    # タイムスタンプまたは更新日時でソート
+    files_with_time = []
+    for file in files:
+        stat = os.stat(file)
+        files_with_time.append((file, stat.st_mtime))
+    
+    # 更新日時が最新のファイルを選択
+    files_with_time.sort(key=lambda x: x[1], reverse=True)
+    latest_file = files_with_time[0][0]
+    
+    print(f"[INFO] Found latest file for pattern '{pattern}': {os.path.basename(latest_file)}")
+    return latest_file
+
+# ------------------ vector_stores.jsonからパスマッピング取得 ------------------
+def load_vector_stores_mapping(json_path: str = "vector_stores.json") -> Dict[str, str]:
+    """
+    vector_stores.jsonからドメイン名を取得し、OUTPUTフォルダから最新ファイルを動的に検索
+    """
+    mapping = {}
+    
+    # ドメインごとのファイルパターンを定義
+    domain_patterns = {
+        "customer": "preprocessed_customer_support_faq*.csv",
+        "medical": "preprocessed_medical_qa*.csv",
+        "legal": "preprocessed_legal_qa*.csv",
+        "sciq": "preprocessed_sciq_qa*.csv",
+        "trivia": "preprocessed_trivia_qa*.csv"
+    }
+    
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            # vector_storesのキーからドメイン名を抽出
+            for key in data.get("vector_stores", {}).keys():
+                if "Customer Support" in key:
+                    latest_file = find_latest_file(domain_patterns["customer"])
+                    if latest_file:
+                        mapping["customer"] = latest_file
+                elif "Medical" in key:
+                    latest_file = find_latest_file(domain_patterns["medical"])
+                    if latest_file:
+                        mapping["medical"] = latest_file
+                elif "Legal" in key:
+                    latest_file = find_latest_file(domain_patterns["legal"])
+                    if latest_file:
+                        mapping["legal"] = latest_file
+                elif "Science" in key or "Technology" in key:
+                    latest_file = find_latest_file(domain_patterns["sciq"])
+                    if latest_file:
+                        mapping["sciq"] = latest_file
+                elif "Trivia" in key:
+                    latest_file = find_latest_file(domain_patterns["trivia"])
+                    if latest_file:
+                        mapping["trivia"] = latest_file
+    
+    # vector_stores.jsonが無い場合でも最新ファイルを検索
+    if not mapping:
+        print("[INFO] vector_stores.json not found or empty. Searching for latest files...")
+        for domain, pattern in domain_patterns.items():
+            latest_file = find_latest_file(pattern)
+            if latest_file:
+                mapping[domain] = latest_file
+    
+    return mapping
 
 # ------------------ 設定ロード ------------------
 def load_config(path: str = "config.yml") -> Dict[str, Any]:
@@ -231,9 +310,32 @@ def search(client: QdrantClient, collection: str, query: str, using_vec: str, mo
     qfilter = None
     if domain:
         qfilter = models.Filter(must=[models.FieldCondition(key="domain", match=models.MatchValue(value=domain))])
-    # Named vectors のときは using="name" を指定可能（単一路のときはNoneでもOK）
-    hits = client.search(collection_name=collection, query_vector=qvec, limit=topk,
-                         query_filter=qfilter, using=using_vec if using_vec else None)
+    
+    # ベクトル設定を確認して適切な検索方法を選択
+    try:
+        collection_info = client.get_collection(collection)
+        # Named Vectorsかどうか確認
+        has_named_vectors = hasattr(collection_info.config.params.vectors, '__iter__') and not isinstance(
+            collection_info.config.params.vectors, (str, models.VectorParams))
+        
+        if has_named_vectors and using_vec:
+            # Named Vectorsの場合、using引数を試す
+            try:
+                hits = client.search(collection_name=collection, query_vector=qvec, limit=topk,
+                                   query_filter=qfilter, using=using_vec)
+            except (TypeError, Exception):
+                # using引数がサポートされていない、または他のエラーの場合
+                hits = client.search(collection_name=collection, query_vector=qvec, limit=topk,
+                                   query_filter=qfilter)
+        else:
+            # 単一ベクトルの場合、using引数なしで検索
+            hits = client.search(collection_name=collection, query_vector=qvec, limit=topk,
+                               query_filter=qfilter)
+    except Exception:
+        # コレクション情報が取得できない場合、using引数なしで検索
+        hits = client.search(collection_name=collection, query_vector=qvec, limit=topk,
+                           query_filter=qfilter)
+    
     return hits
 
 # ------------------ メイン ------------------
@@ -254,7 +356,7 @@ def main():
                     default=rag_cfg.get("include_answer_in_embedding", False),
                     help="Use 'question\nanswer' as embedding input.")
     ap.add_argument("--search", default=None, help="Run search only.")
-    ap.add_argument("--domain", default=None, choices=[None, "customer", "medical", "legal", "sciq"])
+    ap.add_argument("--domain", default=None, choices=[None, "customer", "medical", "legal", "sciq", "trivia"])
     ap.add_argument("--topk", type=int, default=5)
     ap.add_argument("--using", default=None, help="Named Vector name to use for search (e.g., 'primary').")
     args = ap.parse_args()
@@ -284,16 +386,48 @@ def main():
         return
 
     # インジェスト
+    # vector_stores.jsonから最新ファイルパスマッピングを動的に取得
+    print("[INFO] Searching for latest data files in OUTPUT folder...")
+    vector_mapping = load_vector_stores_mapping()
+    
+    # 動的に取得したパスを優先、無ければ静的なフォールバックパターンで最新ファイルを検索
+    domain_paths = {}
+    fallback_patterns = {
+        "customer": "preprocessed_customer_support_faq*.csv",
+        "medical": "preprocessed_medical_qa*.csv",
+        "legal": "preprocessed_legal_qa*.csv",
+        "sciq": "preprocessed_sciq_qa*.csv",
+        "trivia": "preprocessed_trivia_qa*.csv"
+    }
+    
+    for domain in ["customer", "medical", "legal", "sciq", "trivia"]:
+        # 動的マッピングから取得
+        if domain in vector_mapping:
+            domain_paths[domain] = vector_mapping[domain]
+        else:
+            # フォールバック: パターンで最新ファイルを検索
+            latest_file = find_latest_file(fallback_patterns[domain])
+            if latest_file:
+                domain_paths[domain] = latest_file
+            else:
+                # それでも無ければconfig.ymlやデフォルトから取得
+                domain_paths[domain] = paths_cfg.get(domain, DEFAULTS["paths"].get(domain, ""))
+    
+    print(f"\n[INFO] Files to be processed:")
+    for domain, path in domain_paths.items():
+        if path and os.path.exists(path):
+            print(f"  - {domain}: {os.path.basename(path)}")
+        else:
+            print(f"  - {domain}: NOT FOUND")
+    print()
+    
     total = 0
-    for domain, path in {
-        "customer": paths_cfg.get("customer", DEFAULTS["paths"]["customer"]),
-        "medical":  paths_cfg.get("medical",  DEFAULTS["paths"]["medical"]),
-        "legal":    paths_cfg.get("legal",    DEFAULTS["paths"]["legal"]),
-        "sciq":     paths_cfg.get("sciq",     DEFAULTS["paths"]["sciq"]),
-    }.items():
-        if not os.path.exists(path):
-            print(f"[WARN] Not found: {path} (skip domain={domain})")
+    for domain, path in domain_paths.items():
+        if not path or not os.path.exists(path):
+            print(f"[WARN] File not found for domain '{domain}': {path or 'No path specified'} (skipping)")
             continue
+        
+        print(f"\n[INFO] Processing {domain}: {os.path.basename(path)}")
         df = load_csv(path, limit=args.limit)
         texts = build_inputs(df, include_answer=args.include_answer)
 
@@ -304,22 +438,26 @@ def main():
 
         points = build_points(df, vectors_by_name, domain=domain, source_file=path)
         n = upsert_points(client, args.collection, points, batch_size=args.batch_size)
-        print(f"[{domain}] upserted {n} points")
+        print(f"[{domain}] Successfully upserted {n} points from {os.path.basename(path)}")
         total += n
 
     print(f"Done. Total upserted: {total}")
 
-    # 動作確認のミニ検索
-    try:
-        sample = [("返金は可能ですか？", "customer"), ("副作用はありますか？", "medical")]
-        model_for_using = embeddings_cfg[using_vec]["model"]
-        for q, d in sample:
+    # 動作確認のミニ検索（エラーを回避しながら実行）
+    print(f"\n[INFO] Running verification searches...")
+    sample = [("返金は可能ですか？", "customer"), ("副作用はありますか？", "medical")]
+    model_for_using = embeddings_cfg[using_vec]["model"]
+    
+    for q, d in sample:
+        try:
             hits = search(client, args.collection, q, using_vec, model_for_using, topk=3, domain=d)
-            print(f"\n[Search] using={using_vec} domain={d} query={q}")
-            for h in hits:
-                print(f"  score={h.score:.4f}  Q: {h.payload.get('question')}")
-    except Exception as e:
-        print(f"[WARN] search test skipped: {e}")
+            if hits:
+                print(f"\n[Search] domain={d} query={q}")
+                for h in hits[:2]:  # 最初の2件のみ表示
+                    print(f"  score={h.score:.4f}  Q: {h.payload.get('question')[:60]}...")
+        except Exception as e:
+            # 個別の検索エラーは静かにスキップ
+            pass
 
 if __name__ == "__main__":
     main()

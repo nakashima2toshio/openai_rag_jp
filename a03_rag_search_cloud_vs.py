@@ -901,8 +901,76 @@ def display_search_options():
         st.session_state.auto_refresh_stores = auto_refresh
 
 
-def display_search_results(response_text: str, metadata: Dict[str, Any]):
-    """検索結果の表示"""
+def generate_enhanced_response(query: str, search_result: str, has_result: bool = True) -> Tuple[str, Dict[str, Any]]:
+    """検索結果を基に、より自然な日本語回答を生成"""
+    try:
+        # モデル選択
+        selected_model = st.session_state.get('selected_model', 'gpt-4o-mini')
+        
+        # プロンプトの構成
+        if has_result and search_result and search_result.strip():
+            # 検索結果がある場合
+            system_prompt = """あなたは親切なアシスタントです。提供された検索結果を基に、
+ユーザーの質問に対して正確で分かりやすい日本語の回答を生成してください。
+検索結果から関連する情報を抽出し、自然な日本語で説明してください。"""
+            
+            user_prompt = f"""以下の検索結果を参考にして、質問に日本語で回答してください。
+
+【検索結果】
+{search_result}
+
+【質問】
+{query}
+
+この検索結果から取り出して、日本語で回答してください。"""
+        else:
+            # 検索結果がない場合
+            system_prompt = """あなたは親切なアシスタントです。
+ユーザーの質問に対して、あなたの知識を基に正確で分かりやすい日本語の回答を生成してください。"""
+            
+            user_prompt = f"""Vector Storeからの検索結果が見つかりませんでした。
+一般的な知識を基に、以下の質問に日本語で回答してください。
+
+【質問】
+{query}"""
+
+        # ChatCompletion APIを呼び出し
+        response = openai_client.chat.completions.create(
+            model=selected_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=2000
+        )
+        
+        # 回答の抽出
+        enhanced_response = response.choices[0].message.content
+        
+        # メタデータの構築
+        metadata = {
+            "model": selected_model,
+            "has_search_result": has_result,
+            "timestamp": datetime.now().isoformat(),
+            "usage": {
+                "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+                "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+                "total_tokens": response.usage.total_tokens if response.usage else 0
+            }
+        }
+        
+        return enhanced_response, metadata
+        
+    except Exception as e:
+        error_msg = f"回答生成エラー: {str(e)}"
+        logger.error(error_msg)
+        logger.error(traceback.format_exc())
+        return error_msg, {"error": str(e), "timestamp": datetime.now().isoformat()}
+
+
+def display_search_results(response_text: str, metadata: Dict[str, Any], original_query: str):
+    """検索結果の表示（日本語回答生成機能付き）"""
     st.markdown("### 🤖 回答")
     st.markdown(response_text)
 
@@ -932,6 +1000,44 @@ def display_search_results(response_text: str, metadata: Dict[str, Any]):
     # 詳細情報
     with st.expander("🔍 詳細情報", expanded=False):
         st.json(metadata)
+    
+    # 日本語での追加回答生成
+    st.markdown("---")
+    st.markdown("### 🇯🇵 日本語回答（検索結果を基に生成）")
+    
+    with st.spinner("日本語回答を生成中..."):
+        # 検索結果の有無を判定
+        has_result = bool(response_text and 
+                         response_text.strip() and 
+                         "エラー" not in response_text and
+                         "見つかりません" not in response_text)
+        
+        # 日本語回答を生成
+        enhanced_response, enhanced_metadata = generate_enhanced_response(
+            original_query, 
+            response_text,
+            has_result
+        )
+        
+        # 日本語回答を表示
+        if not has_result:
+            st.info("ℹ️ Vector Storeに関連情報が見つからなかったため、一般的な知識から回答します。")
+        
+        st.markdown(enhanced_response)
+        
+        # 生成情報を表示
+        with st.expander("📊 日本語回答生成情報", expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**使用モデル:** {enhanced_metadata.get('model', '')}")
+                st.markdown(f"**検索結果利用:** {'あり' if enhanced_metadata.get('has_search_result') else 'なし'}")
+            with col2:
+                if 'usage' in enhanced_metadata:
+                    usage = enhanced_metadata['usage']
+                    st.markdown(f"**トークン使用量:**")
+                    st.markdown(f"- 入力: {usage.get('prompt_tokens', 0):,}")
+                    st.markdown(f"- 出力: {usage.get('completion_tokens', 0):,}")
+                    st.markdown(f"- 合計: {usage.get('total_tokens', 0):,}")
 
 
 def main():
@@ -1151,8 +1257,8 @@ def main():
                     selected_model=st.session_state.selected_model  # 選択されたモデルを渡す
                 )
 
-                # 結果表示
-                display_search_results(final_result, final_metadata)
+                # 結果表示（元の質問も渡す）
+                display_search_results(final_result, final_metadata, query)
 
                 # 検索履歴に追加（型安全）
                 history_item: Dict[str, Any] = {

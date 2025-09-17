@@ -163,35 +163,4 @@ legal_qa.csv                ⑤ 法律・判例QAデータセット
 
 （6）ヘルパー関数
 helper_api.py
-helper_rag.py
-helper_st.py
-
-
-# ----------------------------------------------
-
-下記仕様で設計書を作成せよ。
-不足情報があれば、指摘せよ。
-
-仕様書：
-仕様書、詳細設計書、各種、処理フローの作成
-
-概要書
-・処理の概要
-・mainの処理の流れ
-
-クラス、関数・一覧
-・列データ：　関数名, 処理概要
-
-関数の詳細設計書
-・処理概要
-・処理の流れ
-・IPO(INPUT、PROCESS、OUTPUT)
-
-----------------------------------
-Legal Q&A: vs_687a062418ec8191872efdbf8f554836
-Science & Technology Q&A: vs_687a061acc908191af7d5d9ba623470b
-Medical Q&A: vs_687a060f9ed881918b213bfdeab8241b
-Customer Support FAQ: vs_687a0604f1508191aaf416d88e266ab7
-----------
-
-
+helper_rag
