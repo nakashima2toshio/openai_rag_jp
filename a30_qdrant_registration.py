@@ -19,6 +19,10 @@ a30_qdrant_registration.py — helper群・config.yml連携版（単一コレク
   python a30_qdrant_registration.py --recreate
   python a30_qdrant_registration.py --search "副作用はありますか？" --domain medical --using primary
 
+初回登録（--recreate推奨）
+     python a30_qdrant_registration.py --recreate --include-answer
+
+
 主要引数：
   --recreate           : コレクション削除→新規作成
   --collection         : コレクション名（既定は YAML の rag.collection または 'qa_corpus'）
