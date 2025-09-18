@@ -32,6 +32,26 @@ OpenAI Vector Store APIを使用して、前処理済みのRAGデータ（CSVフ
 streamlit run a02_set_vector_store_vsid.py --server.port=8502
 ```
 
+### 1.6 入出力ファイル一覧
+
+| 種別 | データセット | ファイル名 | パス | 説明 |
+|------|------------|------------|------|------|
+| 入力 | customer_support_faq | preprocessed_customer_support_faq.csv | OUTPUT/ | カスタマーサポートFAQ前処理済みデータ |
+| 入力 | medical_qa | preprocessed_medical_qa.csv | OUTPUT/ | 医療QA前処理済みデータ |
+| 入力 | sciq_qa | preprocessed_sciq_qa.csv | OUTPUT/ | 科学・技術QA前処理済みデータ |
+| 入力 | legal_qa | preprocessed_legal_qa.csv | OUTPUT/ | 法律QA前処理済みデータ |
+| 入力 | trivia_qa | preprocessed_trivia_qa.csv | OUTPUT/ | TriviaQA前処理済みデータ |
+| 一時 | - | *.txt (一時ファイル) | /tmp/ | JSONL形式の一時ファイル（処理後自動削除） |
+| 出力 | - | vector_store_results_*.json | ユーザー指定 | 処理結果JSON（ダウンロード） |
+| 出力 | - | vector_store_ids_*.txt | ユーザー指定 | Vector Store IDリスト（ダウンロード） |
+| 出力 | - | (Vector Store) | OpenAI Cloud | 作成されたVector Store（クラウド上） |
+
+**注記:**
+- 入力ファイルはすべてOUTPUTディレクトリから読み込まれる
+- CSVファイルのテキストカラム名は「Combined_Text」（trivia_qaのみ「combined_text」小文字）
+- 一時ファイルは処理完了後にfinally節で自動削除される
+- 出力のVector Store IDはOpenAI APIから返される識別子
+
 ## 2. システム構成
 
 ### 2.1 アーキテクチャ図
@@ -416,15 +436,15 @@ logger.info(f"✅ JSONL変換成功: {len(jsonl_data_list)}チャンク作成")
 
 ```
 ┌────────────────────────────────────────┐
-│      🔗 Vector Store作成アプリ          │
+│      🔗 Vector Store作成アプリ           │
 ├────────────┬───────────────────────────┤
 │            │                           │
 │  Sidebar   │    Main Content Area      │
 │            │                           │
 │ - Model    │  Tabs:                    │
-│ - Options  │  - Vector Store作成        │
-│ - API設定  │  - ファイル状況            │
-│            │  - 既存Store一覧          │
+│ - Options  │  - Vector Store作成       │
+│ - API設定  │  - ファイル状況             │
+│            │  - 既存Store一覧           │
 │            │                           │
 └────────────┴───────────────────────────┘
 ```

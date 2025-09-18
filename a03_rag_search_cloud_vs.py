@@ -83,7 +83,8 @@ class VectorStoreManager:
         "Science & Technology Q&A": "vs_68c94db932fc8191b6e17f86e6601bc1",
         "Medical Q&A"             : "vs_68c94daffc708191b3c561f4dd6b2af8",
         "Legal Q&A"               : "vs_68c94dc1cc008191a197bdbc3947a67b",
-        "Trivia Q&A"              : "vs_68c94dc9e6b08191946d7cafcd9880a3"
+        "Trivia Q&A"              : "vs_68c94dc9e6b08191946d7cafcd9880a3",
+        "Unified Knowledge Base"  : "vs_unified_placeholder"  # 統合ナレッジベース（プレースホルダー）
     }
 
     # a30_020_make_vsid.py のVectorStoreConfigと対応するマッピング
@@ -92,7 +93,8 @@ class VectorStoreManager:
         "medical_qa"          : "Medical Q&A Knowledge Base",
         "sciq_qa"             : "Science & Technology Q&A Knowledge Base",
         "legal_qa"            : "Legal Q&A Knowledge Base",
-        "trivia_qa"           : "Trivia Q&A Knowledge Base"
+        "trivia_qa"           : "Trivia Q&A Knowledge Base",
+        "unified_all"         : "Unified Knowledge Base - All Domains"
     }
 
     # 表示名への逆マッピング（UI表示用）
@@ -101,7 +103,8 @@ class VectorStoreManager:
         "Medical Q&A Knowledge Base"             : "Medical Q&A",
         "Science & Technology Q&A Knowledge Base": "Science & Technology Q&A",
         "Legal Q&A Knowledge Base"               : "Legal Q&A",
-        "Trivia Q&A Knowledge Base"              : "Trivia Q&A"
+        "Trivia Q&A Knowledge Base"              : "Trivia Q&A",
+        "Unified Knowledge Base - All Domains"   : "Unified Knowledge Base"
     }
 
     def __init__(self, openai_client: OpenAI = None):
@@ -401,6 +404,15 @@ test_questions_4_en = [
     "What are the basic principles of labor law?",
     "What is an overview of personal data protection law?",
     "What is the scope of application of consumer protection law?"
+]
+
+# 統合ナレッジベース用のテスト質問（全ドメインから）
+test_questions_unified_en = [
+    "How do I reset my password?",  # Customer Support
+    "What is machine learning?",  # Science & Technology
+    "What are the symptoms of flu?",  # Medical
+    "What is a non-disclosure agreement?",  # Legal
+    "Who invented the telephone?",  # Trivia
 ]
 
 # 日本語テスト質問は削除（英語のみ使用）
@@ -725,6 +737,7 @@ def get_test_questions_by_store(store_name: str) -> List[str]:
         "Science & Technology Q&A": test_questions_2_en,
         "Medical Q&A"             : test_questions_3_en,
         "Legal Q&A"               : test_questions_4_en,
+        "Unified Knowledge Base"  : test_questions_unified_en,  # 統合ナレッジベース
     }
 
     # 完全一致確認

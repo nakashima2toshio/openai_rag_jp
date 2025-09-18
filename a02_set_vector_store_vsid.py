@@ -64,6 +64,21 @@ class VectorStoreConfig:
     csv_text_column: str = "Combined_Text"  # CSVファイルから読み込むテキストカラム名
 
     @classmethod
+    def get_unified_config(cls) -> 'VectorStoreConfig':
+        """統合Vector Store用設定を取得"""
+        return cls(
+            dataset_type="unified_all",
+            filename="unified_datasets.csv",  # 仮想ファイル名
+            store_name="Unified Knowledge Base - All Domains",
+            description="全ドメイン統合ナレッジベース（医療・法律・科学・FAQ・雑学）",
+            chunk_size=3000,  # 中間的なサイズ
+            overlap=200,
+            max_file_size_mb=100,  # 統合時の制限を緩和
+            max_chunks_per_file=50000,  # チャンク数制限を拡大
+            csv_text_column="Combined_Text"
+        )
+    
+    @classmethod
     def get_all_configs(cls) -> Dict[str, 'VectorStoreConfig']:
         """全データセット設定を取得（CSVファイル対応版）"""
         return {
@@ -113,14 +128,14 @@ class VectorStoreConfig:
             ),
             "trivia_qa"           : cls(
                 dataset_type="trivia_qa",
-                filename="preprocessed_trivia_qa_20250916_203308.csv",  # 実際のファイル名に合わせて調整
+                filename="preprocessed_trivia_qa.csv",
                 store_name="Trivia Q&A Knowledge Base",
                 description="雑学質問回答データベース",
                 chunk_size=2500,  # 適切なサイズに設定
                 overlap=100,
                 max_file_size_mb=25,
                 max_chunks_per_file=7000,
-                csv_text_column="combined_text"  # TriviaQAでは小文字のcombined_text
+                csv_text_column="Combined_Text"  # TriviaQAでは大文字のCombined_Text
             )
         }
 
@@ -217,11 +232,21 @@ class VectorStoreProcessor:
 
         return text
 
-    def text_to_jsonl_data(self, lines: List[str], dataset_type: str) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """テキスト行をJSONL用のデータ構造に変換（サイズ制限チェック付き）"""
-        config = self.configs.get(dataset_type)
-        if not config:
-            raise ValueError(f"未知のデータセットタイプ: {dataset_type}")
+    def text_to_jsonl_data(self, lines: List[str], dataset_type: str, source_dataset: str = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """テキスト行をJSONL用のデータ構造に変換（サイズ制限チェック付き）
+        
+        Args:
+            lines: テキスト行のリスト
+            dataset_type: データセットタイプ（設定キー）
+            source_dataset: 元のデータセット名（統合時に使用）
+        """
+        # 統合モードの場合は統合設定を使用
+        if dataset_type == "unified_all":
+            config = VectorStoreConfig.get_unified_config()
+        else:
+            config = self.configs.get(dataset_type)
+            if not config:
+                raise ValueError(f"未知のデータセットタイプ: {dataset_type}")
 
         chunk_size = config.chunk_size
         overlap = config.overlap
@@ -248,15 +273,33 @@ class VectorStoreProcessor:
                         f"⚠️ チャンク数が上限({max_chunks:,})に達しました。残り{len(lines) - idx:,}行はスキップされます。")
                     break
 
+                # 統合モード用のメタデータ設定
+                metadata = {
+                    "dataset"      : source_dataset if source_dataset else dataset_type,
+                    "original_line": idx,
+                    "chunk_index"  : chunk_idx,
+                    "total_chunks" : len(chunks)
+                }
+                
+                # ドメイン情報追加（統合モード時）
+                if source_dataset:
+                    if "medical" in source_dataset:
+                        metadata["domain"] = "medical"
+                    elif "legal" in source_dataset:
+                        metadata["domain"] = "legal"
+                    elif "sciq" in source_dataset or "science" in source_dataset:
+                        metadata["domain"] = "science"
+                    elif "customer" in source_dataset or "faq" in source_dataset:
+                        metadata["domain"] = "customer_support"
+                    elif "trivia" in source_dataset:
+                        metadata["domain"] = "trivia"
+                    else:
+                        metadata["domain"] = "general"
+
                 jsonl_entry = {
-                    "id"      : f"{dataset_type}_{idx}_{chunk_idx}",
+                    "id"      : f"{source_dataset if source_dataset else dataset_type}_{idx}_{chunk_idx}",
                     "text"    : chunk,
-                    "metadata": {
-                        "dataset"      : dataset_type,
-                        "original_line": idx,
-                        "chunk_index"  : chunk_idx,
-                        "total_chunks" : len(chunks)
-                    }
+                    "metadata": metadata
                 }
 
                 jsonl_data.append(jsonl_entry)
@@ -281,11 +324,13 @@ class VectorStoreProcessor:
             "estimated_size_mb": total_size / (1024 * 1024),
             "warnings"         : warnings,
             "chunk_size_used"  : chunk_size,
-            "overlap_used"     : overlap
+            "overlap_used"     : overlap,
+            "source_dataset"   : source_dataset if source_dataset else dataset_type
         }
 
+        dataset_label = source_dataset if source_dataset else dataset_type
         logger.info(
-            f"{dataset_type}: {len(lines)}行 -> {len(jsonl_data)}チャンク (推定{stats['estimated_size_mb']:.1f}MB)")
+            f"{dataset_label}: {len(lines)}行 -> {len(jsonl_data)}チャンク (推定{stats['estimated_size_mb']:.1f}MB)")
 
         if warnings:
             for warning in warnings:
@@ -438,6 +483,146 @@ class VectorStoreManager:
                 os.unlink(temp_file_path)
                 logger.info("🗑️ 一時ファイルを削除しました")
 
+    def process_unified_datasets(self, selected_datasets: List[str], output_dir: Path = None) -> Dict[str, Any]:
+        """複数データセットを統合してVector Storeを作成"""
+        if output_dir is None:
+            output_dir = Path("OUTPUT")
+        
+        # 統合設定を取得
+        unified_config = VectorStoreConfig.get_unified_config()
+        
+        # 全データセット分のJSONLデータを集積
+        all_jsonl_data = []
+        total_lines = 0
+        processed_lines = 0
+        dataset_stats = {}
+        all_warnings = []
+        
+        logger.info(f"統合Vector Store作成開始: {len(selected_datasets)}データセット")
+        
+        # 各データセットを処理
+        for dataset_type in selected_datasets:
+            config = self.configs.get(dataset_type)
+            if not config:
+                logger.warning(f"不明なデータセット: {dataset_type}")
+                continue
+            
+            filepath = output_dir / config.filename
+            if not filepath.exists():
+                logger.warning(f"ファイル不在: {filepath}")
+                all_warnings.append(f"⚠️ {config.description}のファイルが見つかりません")
+                continue
+            
+            try:
+                # CSVファイル読み込み
+                text_lines = self.processor.load_csv_file(filepath, config.csv_text_column)
+                
+                if not text_lines:
+                    logger.warning(f"有効なテキストなし: {filepath}")
+                    continue
+                
+                # 統合モード用にJSONL変換（source_datasetパラメータを渡す）
+                jsonl_data, stats = self.processor.text_to_jsonl_data(
+                    text_lines, 
+                    "unified_all",  # 統合設定を使用
+                    source_dataset=dataset_type  # 元のデータセット名を保持
+                )
+                
+                # 統計情報収集
+                dataset_stats[dataset_type] = {
+                    "original_lines": len(text_lines),
+                    "chunks": len(jsonl_data),
+                    "size_mb": stats.get("estimated_size_mb", 0)
+                }
+                
+                total_lines += len(text_lines)
+                processed_lines += stats.get("processed_lines", 0)
+                
+                # 警告収集
+                if stats.get("warnings"):
+                    all_warnings.extend([f"[{config.description}] {w}" for w in stats["warnings"]])
+                
+                # データを統合リストに追加
+                all_jsonl_data.extend(jsonl_data)
+                
+                logger.info(f"  {config.description}: {len(jsonl_data)}チャンク追加")
+                
+            except Exception as e:
+                logger.error(f"{dataset_type}処理エラー: {e}")
+                all_warnings.append(f"❌ {config.description}の処理中にエラー: {str(e)}")
+        
+        # 統合データが空の場合
+        if not all_jsonl_data:
+            return {
+                "success": False,
+                "error": "統合可能なデータが見つかりませんでした",
+                "warnings": all_warnings
+            }
+        
+        # 統合データのサイズチェック
+        total_size = sum(len(json.dumps(entry, ensure_ascii=False)) for entry in all_jsonl_data)
+        total_size_mb = total_size / (1024 * 1024)
+        
+        logger.info(f"統合データ: 合計{len(all_jsonl_data)}チャンク, {total_size_mb:.1f}MB")
+        
+        # サイズ制限チェック（統合時は100MBまで許可）
+        if total_size_mb > unified_config.max_file_size_mb:
+            # データをトリミング
+            target_size_mb = unified_config.max_file_size_mb * 0.9  # 90%を目標
+            reduction_ratio = target_size_mb / total_size_mb
+            target_chunks = int(len(all_jsonl_data) * reduction_ratio)
+            
+            logger.warning(f"統合データサイズ超過: {total_size_mb:.1f}MB -> {target_size_mb:.1f}MB")
+            all_warnings.append(f"⚠️ データサイズ制限により{len(all_jsonl_data)}チャンクから{target_chunks}チャンクに削減")
+            
+            # 各データセットから均等に削減
+            all_jsonl_data = all_jsonl_data[:target_chunks]
+            
+            # サイズ再計算
+            total_size = sum(len(json.dumps(entry, ensure_ascii=False)) for entry in all_jsonl_data)
+            total_size_mb = total_size / (1024 * 1024)
+        
+        # Vector Store作成
+        try:
+            store_name = unified_config.store_name
+            logger.info(f"統合Vector Store作成開始: {store_name}")
+            
+            vector_store_id = self.create_vector_store_from_jsonl_data(all_jsonl_data, store_name)
+            
+            if vector_store_id:
+                self.created_stores["unified_all"] = vector_store_id
+                
+                return {
+                    "success": True,
+                    "vector_store_id": vector_store_id,
+                    "store_name": store_name,
+                    "processed_lines": processed_lines,
+                    "total_lines": total_lines,
+                    "created_chunks": len(all_jsonl_data),
+                    "estimated_size_mb": total_size_mb,
+                    "warnings": all_warnings,
+                    "dataset_stats": dataset_stats,
+                    "config_used": {
+                        "chunk_size": unified_config.chunk_size,
+                        "overlap": unified_config.overlap,
+                        "datasets_included": selected_datasets
+                    }
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "統合Vector Store作成に失敗しました",
+                    "warnings": all_warnings
+                }
+                
+        except Exception as e:
+            logger.error(f"統合Vector Store作成エラー: {e}")
+            return {
+                "success": False,
+                "error": f"統合処理中にエラーが発生: {str(e)}",
+                "warnings": all_warnings
+            }
+    
     def process_single_dataset(self, dataset_type: str, output_dir: Path = None) -> Dict[str, Any]:
         """単一データセットの処理（完全修正版）"""
         if output_dir is None:
@@ -882,7 +1067,7 @@ def main():
         return
 
     # メインコンテンツエリア
-    tab1, tab2, tab3 = st.tabs(["🔗 Vector Store作成", "📁 ファイル状況", "📚 既存Store一覧"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🔗 個別作成", "🌍 統合作成", "📁 ファイル状況", "📚 既存Store一覧"])
 
     with tab1:
         # データセット選択または一括処理
@@ -1048,6 +1233,164 @@ def main():
             st.info("👆 作成するVector Storeのデータセットを選択してください")
 
     with tab2:
+        # 統合Vector Store作成タブ
+        st.header("🌍 統合Vector Store作成")
+        st.markdown("複数のデータセットを1つの統合Vector Storeにまとめます")
+        
+        # 統合設定の表示
+        unified_config = VectorStoreConfig.get_unified_config()
+        with st.expander("⚙️ 統合設定", expanded=True):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.write("**チャンクサイズ**: ", unified_config.chunk_size)
+                st.write("**オーバーラップ**: ", unified_config.overlap)
+            with col2:
+                st.write("**最大ファイルサイズ**: ", f"{unified_config.max_file_size_mb} MB")
+                st.write("**最大チャンク数**: ", f"{unified_config.max_chunks_per_file:,}")
+            with col3:
+                st.write("**Store名**: ", unified_config.store_name)
+        
+        # 統合するデータセット選択
+        st.subheader("📋 統合するデータセット選択")
+        
+        # クイック選択ボタン
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("🔄 全て選択", key="select_all_unified"):
+                for dataset_type in ui.configs.keys():
+                    st.session_state[f"unified_{dataset_type}"] = True
+                st.rerun()
+        with col2:
+            if st.button("❌ 全て解除", key="deselect_all_unified"):
+                for dataset_type in ui.configs.keys():
+                    st.session_state[f"unified_{dataset_type}"] = False
+                st.rerun()
+        
+        # データセット選択チェックボックス
+        selected_for_unified = []
+        output_dir = Path("OUTPUT")
+        
+        for dataset_type, config in ui.configs.items():
+            filepath = output_dir / config.filename
+            file_exists = filepath.exists()
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                selected = st.checkbox(
+                    config.description,
+                    key=f"unified_{dataset_type}",
+                    disabled=not file_exists,
+                    help=f"ファイル: {config.filename}"
+                )
+                if selected:
+                    selected_for_unified.append(dataset_type)
+            
+            with col2:
+                if file_exists:
+                    file_size = filepath.stat().st_size
+                    st.success(f"✅ {file_size / (1024*1024):.1f} MB")
+                else:
+                    st.error("❌ ファイル不在")
+        
+        # 統合実行ボタン
+        if selected_for_unified:
+            st.markdown("---")
+            
+            # 選択状況サマリー
+            st.write(f"**選択されたデータセット**: {len(selected_for_unified)}個")
+            
+            # 推定統計
+            total_estimated_size = 0
+            for dataset_type in selected_for_unified:
+                config = ui.configs[dataset_type]
+                filepath = output_dir / config.filename
+                if filepath.exists():
+                    total_estimated_size += filepath.stat().st_size
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("選択データセット数", len(selected_for_unified))
+            with col2:
+                st.metric("推定合計サイズ", f"{total_estimated_size / (1024*1024):.1f} MB")
+            with col3:
+                st.metric("制限サイズ", f"{unified_config.max_file_size_mb} MB")
+            
+            # 統合実行ボタン
+            if st.button("🚀 統合Vector Store作成", type="primary", key="create_unified"):
+                with st.spinner("統合Vector Storeを作成中..."):
+                    # プログレスバー
+                    progress = st.progress(0)
+                    status = st.empty()
+                    
+                    # 統合処理実行
+                    status.text("📊 データセットを統合中...")
+                    progress.progress(0.3)
+                    
+                    result = manager.process_unified_datasets(selected_for_unified)
+                    
+                    progress.progress(1.0)
+                    
+                    # 結果表示
+                    if result["success"]:
+                        status.success("✅ 統合Vector Store作成完了!")
+                        
+                        # 成功情報表示
+                        st.success(f"Vector Store ID: `{result['vector_store_id']}`")
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("処理行数", f"{result['processed_lines']:,}/{result['total_lines']:,}")
+                        with col2:
+                            st.metric("作成チャンク数", f"{result['created_chunks']:,}")
+                        with col3:
+                            st.metric("最終サイズ", f"{result['estimated_size_mb']:.1f} MB")
+                        with col4:
+                            st.metric("含まれるデータセット", len(result['config_used']['datasets_included']))
+                        
+                        # データセット別統計
+                        if result.get('dataset_stats'):
+                            with st.expander("📊 データセット別統計", expanded=True):
+                                stats_data = []
+                                for ds_type, stats in result['dataset_stats'].items():
+                                    stats_data.append({
+                                        "データセット": ui.configs[ds_type].description,
+                                        "元の行数": f"{stats['original_lines']:,}",
+                                        "チャンク数": f"{stats['chunks']:,}",
+                                        "サイズ(MB)": f"{stats['size_mb']:.1f}"
+                                    })
+                                df_stats = pd.DataFrame(stats_data)
+                                st.dataframe(df_stats, use_container_width=True)
+                        
+                        # 警告表示
+                        if result.get('warnings'):
+                            with st.expander(f"⚠️ 警告 ({len(result['warnings'])}件)", expanded=False):
+                                for warning in result['warnings']:
+                                    st.warning(warning)
+                        
+                        # ダウンロードボタン
+                        result_json = json.dumps(result, indent=2, ensure_ascii=False)
+                        st.download_button(
+                            label="📄 統合結果をJSONでダウンロード",
+                            data=result_json,
+                            file_name=f"unified_vector_store_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                            mime="application/json"
+                        )
+                        
+                        # ID保存用テキスト
+                        id_text = f"# 統合Vector Store\nUNIFIED_VECTOR_STORE_ID = \"{result['vector_store_id']}\""
+                        st.code(id_text, language="python")
+                        
+                    else:
+                        status.error("❌ 統合Vector Store作成失敗")
+                        st.error(f"エラー: {result['error']}")
+                        
+                        if result.get('warnings'):
+                            for warning in result['warnings']:
+                                st.warning(warning)
+        else:
+            st.info("👆 統合するデータセットを選択してください")
+
+    with tab3:
         # ファイル状況表示
         ui.display_file_status()
 
@@ -1081,7 +1424,7 @@ def main():
             else:
                 st.error(f"OUTPUTディレクトリが存在しません: {output_dir}")
 
-    with tab3:
+    with tab4:
         # 既存Vector Store一覧
         ui.display_existing_stores(manager)
 

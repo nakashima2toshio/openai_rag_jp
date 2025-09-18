@@ -21,6 +21,7 @@ a01_load_set_rag_data.py - 統合RAGデータ処理ツール
 2. medical_qa: 医療分野のQ&Aデータ（推論過程付き）
 3. sciq_qa: 科学・技術分野のQ&Aデータ（選択肢付き）
 4. legal_qa: 法律・判例に関するQ&Aデータ
+5. tirivia_qa: 雑学のQA
 """
 
 import streamlit as st
