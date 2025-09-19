@@ -161,8 +161,18 @@ with st.sidebar:
             if st.button(f"{i}. {question[:30]}...", key=f"sample_{domain}_{i}"):
                 st.session_state['selected_query'] = question
     else:
-        # Show sample questions for product_embeddings
+        # Show two examples for each domain when ALL is selected
+        st.write("**ALLドメインの質問例（各ドメイン2件）**")
+        for dom in ["customer", "medical", "legal", "sciq", "trivia"]:
+            st.caption(f"{dom.upper()} ドメイン")
+            examples = SAMPLE_QUESTIONS.get(dom, [])[:2]
+            for i, q in enumerate(examples, 1):
+                if st.button(f"{dom} {i}. {q[:30]}...", key=f"sample_all_{dom}_{i}"):
+                    st.session_state['selected_query'] = q
+
+        # Additionally show product_embeddings samples if that collection is selected
         if collection == "product_embeddings":
+            st.markdown("---")
             st.write("**Product Embeddings サンプル検索:**")
             sample_queries = [
                 "製品の特徴",
@@ -173,8 +183,6 @@ with st.sidebar:
             for i, q in enumerate(sample_queries, 1):
                 if st.button(f"{i}. {q}", key=f"sample_product_{i}"):
                     st.session_state['selected_query'] = q
-        else:
-            st.write("ドメインを選択すると質問例が表示されます")
 
 # Initialize session state for query
 if 'selected_query' not in st.session_state:
@@ -183,7 +191,7 @@ if 'selected_query' not in st.session_state:
 st.code("""
   - collection「qa_corpus」は5種類のデータセット（customer, medical, legal, sciq, trivia）に対応
   - ここでドメインを選択するとそのドメインに特化した情報が取り出せます。
-  - collection「qa_corpus」は製品情報に特化しています。
+  - collection「qa_corpus」のDomain=ALLは5つのデータセットの統合版です。
   - OpenAIのembeddingモデルが多言語対応のため、日本語質問と英語データが同じベクトル空間で比較可能
   - 例ば、日本語「返金は可能ですか？」と英語「Can I get a refund?」の類似度が0.4957と高い値を示している
   - この多言語embedding機能により、翻訳なしで日英間の意味的検索が実現されている。
@@ -277,6 +285,41 @@ if do_search and query.strip():
             st.write(f"**Score:** {best_result['score']:.4f}")
             st.write(f"**Question:** {best_result['question']}")
             st.write(f"**Answer:** {best_result['answer']}")
+
+            # Ask OpenAI again using the result + original query (Japanese output)
+            st.subheader("🧠 OpenAI 応答（日本語）")
+            try:
+                br_q = best_result.get("question") or ""
+                br_a = best_result.get("answer") or ""
+                br_score = best_result.get("score") or 0.0
+
+                qa_prompt_jp = (
+                    "以下の検索結果（スコア・質問・回答）とユーザーの元の質問を踏まえて、" \
+                    "日本語で簡潔かつ正確に回答してください。必要に応じて箇条書きを用いてください。\n\n"
+                    f"ユーザーの元の質問（query）:\n{query}\n\n"
+                    f"検索結果のスコア: {br_score:.4f}\n"
+                    f"検索結果の質問: {br_q}\n"
+                    f"検索結果の回答: {br_a}\n"
+                )
+
+                st.markdown("**質問（プロンプト）**")
+                st.code(qa_prompt_jp)
+
+                with st.spinner("OpenAIに問い合わせ中..."):
+                    oai_client = OpenAI()
+                    oai_resp = oai_client.responses.create(
+                        model="gpt-4o-mini",
+                        input=qa_prompt_jp
+                    )
+                    generated_answer = getattr(oai_resp, "output_text", None) or ""
+
+                st.markdown("**回答（日本語）**")
+                if generated_answer.strip():
+                    st.write(generated_answer)
+                else:
+                    st.info("応答テキストを取得できませんでした。")
+            except Exception as gen_err:
+                st.error(f"OpenAI応答生成に失敗しました: {str(gen_err)}")
     except ConnectionRefusedError:
         st.error(f"❌ Qdrantサーバーへの接続が拒否されました: {qdrant_url}")
         st.error("Qdrantサーバーが起動していることを確認してください:")
