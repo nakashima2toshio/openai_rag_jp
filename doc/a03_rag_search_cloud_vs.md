@@ -21,11 +21,12 @@ OpenAI Responses APIとfile_searchツールを使用して、Vector Store内の�
 - Agent SDK連携（オプション）
 - 型安全実装（型エラー完全修正）
 
-### 1.4 実行環境
-- Python 3.9以上
-- Streamlit 1.28.0以上
-- OpenAI SDK 1.0以上
-- 環境変数：OPENAI_API_KEY
+### 1.4 実行環境（最新版）
+- Python 3.12以上（本リポジトリのガイドライン準拠）
+- Streamlit 1.48以上（requirements.txt 準拠）
+- OpenAI Python SDK 1.100系（requirements.txt 準拠）
+- オプション: OpenAI Agent SDK（`agents` パッケージ、未導入でも動作）
+- 環境変数：`OPENAI_API_KEY`
 
 ### 1.5 起動方法
 ```bash
@@ -126,6 +127,14 @@ classDiagram
 | `get_rag_manager` | なし | ModernRAGManager | シングルトンインスタンス取得 |
 | `get_current_vector_stores` | force_refresh: bool | Tuple[Dict, List] | 現在のVector Store設定取得 |
 | `initialize_session_state` | なし | なし | セッション状態初期化 |
+| `display_search_history` | なし | なし | 検索履歴表示（最新10件/最大50件保持） |
+| `get_test_questions_by_store` | store_name: str | List[str] | Store別のテスト質問集を取得（英語） |
+| `display_test_questions` | なし | なし | テスト質問UI表示（クリックで入力欄に反映） |
+| `display_vector_store_management` | なし | なし | Vector Store更新/デバッグ/設定閲覧 |
+| `display_system_info` | なし | なし | 利用可能機能の状態表示 |
+| `display_search_options` | なし | なし | 最大件数/引用表示/自動更新/Agent SDK切替 |
+| `generate_enhanced_response` | query:str, search_result:str, has_result:bool | Tuple[str, Dict] | 日本語の追加回答生成（Chat Completions） |
+| `display_search_results` | response_text:str, metadata:Dict, original_query:str | なし | 検索結果＋引用＋日本語回答生成の表示 |
 | `main` | なし | なし | メインエントリーポイント |
 
 ## 4. クラス詳細設計
@@ -247,9 +256,9 @@ response = openai_client.responses.create(
     tools=[{
         "type": "file_search",
         "vector_store_ids": [store_id],
-        "max_num_results": 20
+        "max_num_results": max_results  # 例: 20（UIから指定）
     }],
-    include=["file_search_call.results"]
+    include=["file_search_call.results"]  # 検索結果詳細を含める
 )
 ```
 
@@ -261,6 +270,22 @@ file_search_tool_dict = {
     "max_num_results": max_results,
     "filters": filters  # オプション
 }
+```
+
+#### 5.1.3 日本語追加回答（Chat Completions）
+Responses APIの生テキストに対し、日本語での要約/再説明を追加生成します。
+
+```python
+response = openai_client.chat.completions.create(
+    model=selected_model,
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}  # 検索結果 + 元の質問
+    ],
+    temperature=0.7,
+    max_tokens=2000
+)
+enhanced_response = response.choices[0].message.content
 ```
 
 ### 5.2 Vector Store設定
@@ -366,6 +391,11 @@ file_search_tool_dict = {
 - 検索情報（メタデータ）
 - 詳細情報（Expander内）
 
+#### 6.3.4 日本語回答生成（追加表示）
+- 検索結果の有無を判定し、Chat Completionsで日本語の追加回答を生成
+- 使用モデル・トークン使用量（入力/出力/合計）を併記
+- 検索結果が空の場合は一般知識ベースで日本語回答を提示
+
 #### 6.3.4 検索履歴
 - 最新10件表示
 - 各履歴アイテム：
@@ -417,6 +447,8 @@ logger.warning(f"⚠️ API取得に失敗、設定ファイルから読み込�
 - 環境変数使用（ハードコード禁止）
 - `OPENAI_API_KEY` から自動取得
 - Streamlit secrets.toml 不要
+
+注記: OpenAI Agent SDKが未導入の場合でも、Responses API + file_search により機能します。
 
 ### 9.2 データセキュリティ
 - HTTPSによる通信暗号化

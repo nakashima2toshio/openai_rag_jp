@@ -22,9 +22,10 @@
 - 複数形式でのデータエクスポート（CSV/TXT/JSON）
 
 ### 1.4 実行環境
-- Python 3.9以上
-- Streamlit 1.28.0以上
-- 依存ライブラリ：pandas, datasets, streamlit
+- Python 3.12以上（本リポジトリのガイドライン準拠）
+- Streamlit 1.48以上（requirements.txt 準拠）
+- 必須: pandas, streamlit
+- 任意: datasets（HuggingFace からの自動ダウンロード機能を使う場合に必要）
 
 ### 1.5 起動方法
 ```bash
@@ -224,6 +225,10 @@ specific_options:
   - include_cot: 推論過程を含める
 ```
 
+注記:
+- UIでは RAGConfig に基づき "Complex_CoT" を含む構成を要求しますが、実データに列が存在しない場合は、
+  取り込み自体は可能です（include_cot のチェックは列がアップロード後に検知された場合のみ表示）。
+
 #### 5.1.3 科学・技術QA
 ```yaml
 dataset_name: sciq
@@ -274,6 +279,10 @@ combined_text = separator.join(selected_columns)
 # セパレータオプション：スペース、改行、タブ、カスタム
 ```
 
+補足:
+- 既定では helper_rag.combine_columns により、データセットごとの主要列を自然なスペース結合で `Combined_Text` を生成。
+- UIで結合対象カラムとセパレータ（スペース/改行/タブ/カスタム）を指定した場合、`Combined_Text` をその設定で上書き生成。
+
 #### 5.2.2 トークン使用量推定
 ```python
 # helper_ragのestimate_token_usage関数を使用
@@ -306,6 +315,19 @@ combined_text = separator.join(selected_columns)
   }
 }
 ```
+
+補足:
+- HuggingFaceからロードした入力データは `datasets/` に CSV とメタデータ（取得条件、列名など）として自動保存されます。
+- OUTPUT保存時には `preprocessed_<dataset_type>.csv`, `<dataset_type>.txt`, `metadata_<dataset_type>.json` を生成します。
+
+### 5.4 データセット固有UIオプション（チェックボックス）
+| データセット | 主なオプション |
+|---|---|
+| customer_support_faq | preserve_formatting, normalize_questions |
+| medical_qa | preserve_medical_terms, include_cot（Complex_CoT列がある場合のみ表示） |
+| sciq_qa | include_distractors, include_support, preserve_scientific_notation |
+| legal_qa | preserve_legal_terms, preserve_references, normalize_case_names |
+| trivia_qa | include_entity_pages, include_search_results, preserve_formatting |
 
 ## 6. エラーハンドリング
 
@@ -406,6 +428,7 @@ if missing_columns:
 
 | 問題 | 原因 | 解決方法 |
 |------|------|----------|
+| HuggingFaceからロードできない | `datasets` ライブラリ未インストール | `pip install datasets` を実行 |
 | データセットがダウンロードできない | ネットワーク接続またはHuggingFace API制限 | VPN確認、時間を置いてリトライ |
 | メモリエラー | データセットが大きすぎる | サンプル数を減らす、またはチャンク処理 |
 | 文字化け | エンコーディング不一致 | UTF-8エンコーディングを明示的に指定 |
