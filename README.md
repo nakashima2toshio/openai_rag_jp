@@ -29,6 +29,7 @@
 日本語対応のRAG（Retrieval-Augmented Generation）システムの完全実装版。OpenAI APIとQdrantベクトルデータベースを使用して、クラウド版とローカル版の両方のRAGシステムを構築できます。
 
 ### 統合RAGデータ処理ツール: 全体像（データ処理図）
+統合RAGデータ処理ツールは、Streamlit UIでCSV/HuggingFaceを読み込み、前処理・列統合・チャンク分割・メタデータ生成・トークン見積もりを一括実行します。出力は `OUTPUT/` に保存され、Vector Store 登録にそのまま利用可能な形式です。実装は `a01_load_set_rag_data.py`、詳細は `doc/a01_load_set_rag_data.md` を参照してください。
 
 ```mermaid
 flowchart TD
@@ -41,6 +42,7 @@ flowchart TD
 ```
 
 ## 検索アルゴリズム フロー（Cloud - OpenAI Vector Store）
+Cloud版RAGは、Responses API と `file_search` ツールで選択した Vector Store に対し TopK 検索→モデル統合→引用抽出を行います。UIからモデル/TopK/詳細取得の有無を制御でき、Vector Store の最新IDは自動更新に対応しています。実装は `a03_rag_search_cloud_vs.py`、詳細は `doc/a03_rag_search_cloud_vs.md` を参照してください。
 
 ```mermaid
 graph TD
@@ -51,9 +53,12 @@ graph TD
   K --> M[モデル統合/回答生成]
   M --> CITE[引用抽出/メタデータ]
 ```
+
 ## 検索アルゴリズム（Local - Qdrant）
 
 ### ベクトル検索プロセス
+
+ローカル版RAGは、OpenAI Embeddingでクエリをベクトル化し、Qdrantに対してコレクション設定に基づく類似検索を実行します。`qa_corpus` は `domain` フィルタに対応、`product_embeddings` は汎用検索向けです。TopK/スコア表示/デバッグ（payloadプレビュー）を備えます。実装は `a50_rag_search_local_qdrant.py`、詳細は `doc/a50_rag_search_local_qdrant.md` を参照してください。
 
 ```mermaid
 graph TD
@@ -71,7 +76,6 @@ graph TD
     H --> I[TopKソート]
     I --> J[結果返却]
 ```
-
 
 ### 🎯 主な特徴
 
