@@ -70,7 +70,7 @@ classDiagram
     class VectorStoreManager {
         -CONFIG_FILE_PATH: Path
         -DEFAULT_VECTOR_STORES: Dict
-        -STORE_NAME_MAPPING: Dict
+        -STORE_NAME_MAPPING: Dict  # a02_set_vector_store_vsid.py と連携
         -DISPLAY_NAME_MAPPING: Dict
         -openai_client: OpenAI
         -_cache: Dict
@@ -149,7 +149,7 @@ class VectorStoreManager:
     Attributes:
         CONFIG_FILE_PATH: 設定ファイルパス（vector_stores.json）
         DEFAULT_VECTOR_STORES: デフォルトVector Store設定
-        STORE_NAME_MAPPING: a30_020_make_vsid.py との連携マッピング
+        STORE_NAME_MAPPING: a02_set_vector_store_vsid.py との連携マッピング
         DISPLAY_NAME_MAPPING: UI表示名マッピング
         openai_client: OpenAI APIクライアント
         _cache: キャッシュデータ
@@ -327,6 +327,43 @@ enhanced_response = response.choices[0].message.content
    - 最新のものを選択
 4. 最終的なVector Store辞書を構築
 ```
+
+## 5.4 検索アルゴリズム
+
+### 5.4.1 フロー
+
+```mermaid
+graph TD
+  Q[日本語/英語クエリ] --> R[OpenAI Responses API]
+  R --> T[file_search ツール]
+  T --> VS[(Vector Store)]
+  VS --> K[類似ドキュメント TopK]
+  K --> M[モデル統合/回答生成]
+  M --> CITE[引用抽出/メタデータ]
+```
+
+- TopK: `max_num_results` に相当（UIの「最大検索結果数」）。
+- 引用: `include=["file_search_call.results"]` 指定で結果詳細を取得・表示。
+- 多言語: 埋め込みと検索はVector Store側の設定に依存（英日クエリに対応可能）。
+
+### 5.4.2 フィルタリング仕様
+
+```python
+file_search_tool_dict = {
+    "type": "file_search",
+    "vector_store_ids": [store_id],
+    "max_num_results": max_results,  # TopK
+    "filters": filters,              # 例: {"document_type": "faq"} など
+}
+```
+
+- `filters` はファイルメタデータに基づく条件を想定。未指定時は全体から検索。
+- UIのオプションで `include_results` をオンにすると結果詳細（スコア等）が含まれる。
+
+### 5.4.3 スコアリングとランク付け
+- Vector Store内部でベクトル類似度により候補を取得（TopK）。
+- Responses APIが候補を統合し、応答テキストを生成。
+- メタデータとして使用量（tokens）・ツール呼び出し・引用ファイルを併記可能。
 
 ## 6. UI仕様
 
@@ -527,7 +564,7 @@ logger.info(f"🔍 処理中: '{store_name}' ({store_id}) - 作成日時: {creat
 
 ## 12. 連携システム
 
-### 12.1 a30_020_make_vsid.py との連携
+### 12.1 a02_set_vector_store_vsid.py との連携
 - 新規作成されたVector Storeを自動認識
 - STORE_NAME_MAPPINGによる名前変換
 - 作成後は「最新情報に更新」で反映

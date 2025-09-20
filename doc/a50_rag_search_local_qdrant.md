@@ -9,32 +9,35 @@
 ローカルのQdrant Vector Databaseを使用して、多言語対応のベクトル検索を実行し、ドメイン別または横断的な質問応答を提供するStreamlitアプリケーション。
 
 ### 1.3 主要機能
-- Qdrant Vector Databaseでのベクトル検索
-- ドメイン別フィルタリング（customer, medical, legal, sciq）
+- Qdrant Vector Databaseでのベクトル検索（コレクション選択対応）
+- ドメイン別フィルタリング（qa_corpus のみ: customer, medical, legal, sciq, trivia）
 - ドメイン横断検索（ALL）
-- TopK設定による結果数制御
-- スコア表示による関連度評価
-- Named Vectors対応
+- コレクション別の埋め込み設定（例: product_embeddings=384次元, qa_corpus=1536次元）
+- TopK設定・スコア表示
+- Named Vectors選択（コレクション設定が無い場合に使用）
 - 多言語embedding（日本語質問→英語データ検索）
-- ドメイン別質問例の提供
+- Qdrant URL上書き入力・Debugモード（payloadプレビュー）
+- ドメイン別/製品向けの質問例表示
 
 ### 1.4 実行環境
-- Python 3.9以上
-- Streamlit 1.28.0以上
-- qdrant-client 1.7.0以上
-- OpenAI SDK（embedding用）
+- Python 3.12以上（本リポジトリのガイドライン準拠）
+- requirements.txt に準拠（`pip install -r requirements.txt`）
+- qdrant-client / Streamlit / OpenAI SDK を使用
 - Qdrantサーバー（localhost:6333）
 
 ### 1.5 起動方法
 ```bash
-# Qdrantサーバー起動
-docker run -p 6333:6333 qdrant/qdrant
+# Qdrantサーバー起動（推奨: docker-compose）
+cd docker-compose && docker-compose up -d
 
 # データ登録（事前準備）
-python a50_qdrant_registration.py
+python a30_qdrant_registration.py
 
 # アプリケーション起動
 streamlit run a50_rag_search_local_qdrant.py --server.port=8504
+
+# （参考）docker 単体起動の代替手段
+# docker run -p 6333:6333 qdrant/qdrant
 ```
 
 ## 2. システム構成
@@ -52,12 +55,12 @@ graph TD
     D --> F[OpenAI Embeddings]
     D --> G[Qdrant Client]
     
-    F --> H[text-embedding-3-small]
+    F --> H[text-embedding-3 family]
     
     G --> I[Search API]
     I --> J[Qdrant Server]
     
-    J --> K[(qa_corpus Collection)]
+    J --> K[(Qdrant Collection)]
     
     K --> L[customer domain]
     K --> M[medical domain]
@@ -111,7 +114,8 @@ sequenceDiagram
 
 ```yaml
 rag:
-  collection: qa_corpus
+  # 既定コレクション（ドメイン絞りは qa_corpus のみ対応）
+  collection: product_embeddings
 
 embeddings:
   primary:
@@ -127,15 +131,21 @@ qdrant:
 
 ```python
 DEFAULTS = {
-    "rag": {"collection": "qa_corpus"},
+    "rag": {"collection": "product_embeddings"},
     "embeddings": {
         "primary": {
-            "provider": "openai", 
-            "model": "text-embedding-3-small", 
+            "provider": "openai",
+            "model": "text-embedding-3-small",
             "dims": 1536
         }
     },
     "qdrant": {"url": "http://localhost:6333"},
+}
+
+# コレクション毎の埋め込み設定（アプリ側で上書き適用）
+COLLECTION_EMBEDDINGS = {
+    "product_embeddings": {"model": "text-embedding-3-small", "dims": 384},
+    "qa_corpus": {"model": "text-embedding-3-small", "dims": 1536},
 }
 ```
 
@@ -248,10 +258,10 @@ vec_name = st.selectbox(
     options=list(embeddings_cfg.keys())
 )
 
-# ドメイン選択
+# ドメイン選択（qa_corpus のみ）。trivia を含む
 domain = st.selectbox(
-    "Domain", 
-    options=["ALL", "customer", "medical", "legal", "sciq"]
+    "Domain",
+    options=["ALL", "customer", "medical", "legal", "sciq", "trivia"]
 )
 
 # TopK設定
@@ -263,6 +273,10 @@ topk = st.slider(
     step=1
 )
 ```
+
+注記:
+- コレクションに `COLLECTION_EMBEDDINGS` の設定がある場合、埋め込みはその設定（モデル/次元）で実行されます。
+- その場合、上記の `vec_name` 選択は表示用で、検索ベクトル生成には使われません（フォールバック時のみ使用）。
 
 #### 5.2.2 質問例表示
 ```python
@@ -356,7 +370,7 @@ except Exception as conn_err:
 | エラー種別 | 判定条件 | 対処表示 |
 |-----------|---------|----------|
 | Connection refused | "Connection refused" in str(e) | Docker起動コマンド表示 |
-| Collection not found | "collection" and "not found" in str(e) | a50_qdrant_registration.py実行案内 |
+| Collection not found | "collection" and "not found" in str(e) | a30_qdrant_registration.py実行案内 |
 | 一般エラー | その他 | エラー詳細とスタックトレース |
 
 ### 6.3 エラー処理実装
@@ -364,7 +378,7 @@ except Exception as conn_err:
 ```python
 except ConnectionRefusedError:
     st.error(f"❌ Qdrantサーバーへの接続が拒否されました")
-    st.code("docker run -p 6333:6333 qdrant/qdrant", language="bash")
+    st.code("cd docker-compose && docker-compose up -d", language="bash")
     
 except Exception as e:
     if "Connection refused" in str(e):
@@ -400,18 +414,13 @@ graph TD
 ### 7.2 フィルタリング仕様
 
 ```python
-# ドメインフィルタの構築
-if domain != "ALL":
-    qfilter = models.Filter(
-        must=[
-            models.FieldCondition(
-                key="domain",
-                match=models.MatchValue(value=domain)
-            )
-        ]
-    )
+# qa_corpus のみ domain フィルタ対応
+if collection == "qa_corpus" and domain != "ALL":
+    qfilter = models.Filter(must=[
+        models.FieldCondition(key="domain", match=models.MatchValue(value=domain))
+    ])
 else:
-    qfilter = None  # 全データ検索
+    qfilter = None
 ```
 
 ### 7.3 スコアリング
@@ -424,13 +433,14 @@ else:
 ### 8.1 Qdrant Collection構造
 
 ```yaml
-collection: qa_corpus
+collection: qa_corpus  # ドメイン絞り対応（payload.domain あり）
+  # または product_embeddings（ドメインなし、一般製品検索用）
 vectors:
   size: 1536
   distance: Cosine
   
 payload:
-  domain: str  # customer, medical, legal, sciq
+  domain: str  # customer, medical, legal, sciq, trivia（qa_corpus のみ）
   question: str
   answer: str
   source: str
@@ -474,7 +484,7 @@ payload:
    docker ps | grep qdrant
 
 2. アプリ起動
-   streamlit run a50_rag_search_local_qdrant.py
+   streamlit run a50_rag_search_local_qdrant.py --server.port=8504
 
 3. ドメイン選択
    サイドバーで "customer" 選択
@@ -519,8 +529,8 @@ query = "How do I reset my password?"
 
 | 問題 | 原因 | 解決方法 |
 |------|------|----------|
-| 接続エラー | Qdrant未起動 | docker run実行 |
-| コレクション不在 | データ未登録 | a50_qdrant_registration.py実行 |
+| 接続エラー | Qdrant未起動 | docker-compose up -d 実行 |
+| コレクション不在 | データ未登録 | a30_qdrant_registration.py実行 |
 | 検索結果なし | フィルタ不一致 | ドメイン選択確認 |
 | 低スコア | クエリ不適切 | 質問を具体化 |
 | OpenAI APIエラー | APIキー未設定 | 環境変数設定 |
@@ -533,8 +543,8 @@ import requests
 response = requests.get("http://localhost:6333/collections")
 print(response.json())
 
-# ベクトル確認
-vec = embed_query("test", model)
+# ベクトル確認（コレクション別の次元）
+vec = embed_query("test", model, dims=COLLECTION_EMBEDDINGS[collection]["dims"])  # 例: 384 or 1536
 print(f"Vector dims: {len(vec)}")
 
 # 検索デバッグ

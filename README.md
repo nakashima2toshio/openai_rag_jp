@@ -4,6 +4,7 @@
 ## 📚 ドキュメント
 
 詳細な使用方法とサンプルプログラムについては：
+- [doc/a00_load_set_data.md](./doc/a00_load_set_data.md) - RAGデータの作成
 - [README_2.md](./README_2.md) - 目的別の詳細な使用例
 - [README_preparation.md](./README_preparation.md) - 開発環境の詳細設定
 - [README_qdrant.md](./README_qdrant.md) - Qdrantローカル版の詳細
@@ -26,6 +27,51 @@
 ## 📌 概要
 
 日本語対応のRAG（Retrieval-Augmented Generation）システムの完全実装版。OpenAI APIとQdrantベクトルデータベースを使用して、クラウド版とローカル版の両方のRAGシステムを構築できます。
+
+### 統合RAGデータ処理ツール: 全体像（データ処理図）
+
+```mermaid
+flowchart TD
+    A[HuggingFace Hub] -- データセット取得 --> B[a01_load_set_rag_data.py]
+    C[ローカルCSV] -- アップロード --> B
+    B -- 処理済みデータ --> D[OUTPUT]
+    B -- 取得メタデータ --> E[datasets]
+    D -- RAG用データ --> F[OpenAI Vector Store]
+    D -- 分析用データ --> G[Analytics / BI]
+```
+
+## 検索アルゴリズム フロー（Cloud - OpenAI Vector Store）
+
+```mermaid
+graph TD
+  Q[日本語/英語クエリ] --> R[OpenAI Responses API]
+  R --> T[file_search ツール]
+  T --> VS[(Vector Store)]
+  VS --> K[類似ドキュメント TopK]
+  K --> M[モデル統合/回答生成]
+  M --> CITE[引用抽出/メタデータ]
+```
+## 検索アルゴリズム（Local - Qdrant）
+
+### ベクトル検索プロセス
+
+```mermaid
+graph TD
+    A[日本語/英語クエリ] --> B[OpenAI Embedding]
+    B --> C[1536次元ベクトル]
+
+    C --> D{ドメイン選択}
+    D -->|ALL| E[全データ検索]
+    D -->|特定ドメイン| F[フィルタ付き検索]
+
+    E --> G[Qdrant Search API]
+    F --> G
+
+    G --> H[コサイン類似度計算]
+    H --> I[TopKソート]
+    I --> J[結果返却]
+```
+
 
 ### 🎯 主な特徴
 
