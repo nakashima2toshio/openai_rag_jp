@@ -323,12 +323,12 @@ if do_search and query.strip():
     except ConnectionRefusedError:
         st.error(f"❌ Qdrantサーバーへの接続が拒否されました: {qdrant_url}")
         st.error("Qdrantサーバーが起動していることを確認してください:")
-        st.code("docker run -p 6333:6333 qdrant/qdrant", language="bash")
+        st.code("cd docker-compose && docker-compose up -d", language="bash")
     except Exception as e:
         if "Connection refused" in str(e):
             st.error(f"❌ Qdrantサーバーに接続できません: {current_qdrant_url}")
             st.error("Qdrantサーバーが起動していることを確認してください:")
-            st.code("docker run -p 6333:6333 qdrant/qdrant", language="bash")
+            st.code("cd docker-compose && docker-compose up -d", language="bash")
         elif "collection" in str(e).lower() and "not found" in str(e).lower():
             st.error(f"❌ コレクション '{collection}' が見つかりません")
             st.error("先に a30_qdrant_registration.py を実行してデータを登録してください:")

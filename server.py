@@ -35,9 +35,7 @@ def check_qdrant_connection():
     if not connections_ok:
         print("\n💡 解決方法:")
         print("1. Qdrantサーバーを起動:")
-        print("   docker-compose -f docker-compose/docker-compose.yml up -d qdrant")
-        print("   または")
-        print("   docker run -p 6333:6333 qdrant/qdrant")
+        print("   cd docker-compose && docker-compose up -d")
         print("2. Qdrantデータを投入:")
         print("   python qdrant_data_loader.py --recreate")
     
@@ -54,7 +52,7 @@ def start_qdrant_server():
         print("✅ Qdrantサーバーは既に稼働中")
         return True
     except Exception:
-        print("🐳 QdrantサーバーをDockerで起動中...")
+        print("🐳 QdrantサーバーをDocker Composeで起動中...")
         try:
             # Docker Composeを優先
             docker_compose_path = Path("docker-compose/docker-compose.yml")
@@ -64,13 +62,7 @@ def start_qdrant_server():
                     "up", "-d", "qdrant"
                 ], check=True, capture_output=True)
             else:
-                # 単独でDocker起動
-                subprocess.run([
-                    "docker", "run", "-d",
-                    "--name", "qdrant",
-                    "-p", "6333:6333",
-                    "qdrant/qdrant"
-                ], check=True, capture_output=True)
+                print("⚠️ docker-compose/docker-compose.yml が見つからないため、自動起動をスキップします")
             
             # 起動待機
             import time
@@ -83,7 +75,7 @@ def start_qdrant_server():
                 except:
                     time.sleep(1)
             
-            print("❌ Qdrantサーバーの起動に失敗")
+            print("❌ Qdrantサーバーの起動に失敗（Docker Compose）")
             return False
         except Exception as e:
             print(f"❌ DockerによるQdrant起動失敗: {e}")
@@ -216,7 +208,7 @@ def main():
     if not start_qdrant_server():
         print("❌ Qdrantサーバーの起動に失敗しました")
         print("手動で起動してください:")
-        print("  docker run -p 6333:6333 qdrant/qdrant")
+        print("  cd docker-compose && docker-compose up -d")
         sys.exit(1)
     
     # 1. Qdrant接続確認

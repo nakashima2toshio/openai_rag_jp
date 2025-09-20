@@ -4,7 +4,7 @@
 ## 📚 ドキュメント
 
 詳細な使用方法とサンプルプログラムについては：
-- [doc/a00_load_set_data.md](./doc/a00_load_set_data.md) - RAGデータの作成
+- [doc/a00_load_set_rag_data.md](./doc/a00_load_set_rag_data.md) - RAGデータの作成
 - [README_2.md](./README_2.md) - 目的別の詳細な使用例
 - [README_preparation.md](./README_preparation.md) - 開発環境の詳細設定
 - [README_qdrant.md](./README_qdrant.md) - Qdrantローカル版の詳細
@@ -12,7 +12,25 @@
 
 ### 開発環境
 
-## 🔗 関連プロジェクト## 🔗 関連プロジェクト
+- 推奨: Python 3.12+
+- 仮想環境作成と依存インストール
+  ```bash
+  python -m venv .venv && source .venv/bin/activate
+  pip install -r requirements.txt
+  ```
+- Lint/整形（ruff）
+  ```bash
+  ruff check . --fix
+  ruff format .
+  ```
+- 環境変数（.env 推奨）
+  ```bash
+  echo "OPENAI_API_KEY=sk-your-api-key" > .env
+  # python-dotenv により一部スクリプトで自動読込。未対応の場合は export で設定
+  # export OPENAI_API_KEY=sk-your-api-key
+  ```
+
+## 🔗 関連プロジェクト
 
 
 | プロジェクト                                                             | 説明                                         | ステータス |
@@ -39,6 +57,41 @@ flowchart TD
     B -- 取得メタデータ --> E[datasets]
     D -- RAG用データ --> F[OpenAI Vector Store]
     D -- 分析用データ --> G[Analytics / BI]
+```
+
+## Cloud - OpenAI Vector Storeに登録
+- code: a02_set_vector_store_vsid.py / doc/a02_set_vector_store_vsid.md
+
+前処理済みCSVを読み込み、チャンク化→JSONL化→OpenAI Filesにアップロードし、Vector Storeを作成・関連付けます。Streamlit UIからデータセット選択、サイズ上限、処理結果の確認が可能で、作成された Store ID は `vector_stores.json` に保存されます。既存Store一覧や重複対策（最新優先）にも対応しています。
+
+```mermaid
+flowchart TD
+  UI["Streamlit UI<br/>a02_set_vector_store_vsid.py"] --> L["CSV Loader"]
+  L --> CH["Chunking / Size Control"]
+  CH --> J["JSONL Converter"]
+  J --> F["OpenAI Files API<br/>files.create"]
+  F --> VS["Vector Stores API<br/>create"]
+  VS --> AT["Attach Files<br/>vector_stores.files.create"]
+  AT --> ST["Status / Counts"]
+  ST --> VJ["vector_stores.json 保存"]
+```
+
+## Local - Qdrant Storeに登録
+- code: a30_qdrant_registration.py / doc/a30_qdrant_registration.md
+
+前処理済みCSVを読み込み、OpenAI Embeddingでベクトル化し、QdrantへUpsertしてコレクションを作成します。`--recreate` で削除→再作成、`--include-answer` で質問+回答を埋め込みに含める切替、Named Vectors/YAML設定にも対応。payload の `domain` によりドメインフィルタ検索が可能です。
+
+```mermaid
+flowchart TD
+  UI["Streamlit/CLI<br/>a30_qdrant_registration.py"] --> L["Load OUTPUT/*.csv"]
+  L --> E["OpenAI Embeddings<br/>batch"]
+  E --> Q["Qdrant Client"]
+  Q --> R{"--recreate?"}
+  R -->|Yes| D["Delete and Create Collection"]
+  R -->|No| K["Ensure Collection"]
+  D --> UP["Upsert Points<br/>vectors + payload"]
+  K --> UP
+  UP --> READY["Ready for Search<br/>qa_corpus / product_embeddings"]
 ```
 
 ## 検索アルゴリズム フロー（Cloud - OpenAI Vector Store）
@@ -112,12 +165,12 @@ graph TD
 |---|---|---|---|---|
 | `a01_load_set_rag_data.py` | **1 前処理**＋**2 チャンク分割** | 正規化／ノイズ除去／メタ抽出 → 文字数基準＋オーバーラップで分割 | 原文, `config_yml.yml` → `OUTPUT/processed/*.jsonl`（`{text, meta, chunk_id}`） | Cloud/Local 共用の前段 |
 | `a02_set_vector_store_vsid.py` | **3 ベクトル化**＋**4 インデックス化（Cloud）** | Vector Store 作成/取得（VSID）→ a01 出力を投入。VS 側で埋め込み生成＆索引化。本文・メタ・chunk_id を格納 | `OUTPUT/processed/*.jsonl` → Vector Store（VSID/ファイルID） | L2 正規化は VS の類似度設定に従う（必要に応じクライアント側で実施） |
-| `a20_rag_search_cloud_vs.py` | **5 検索**＋**6 生成** | クエリ埋め込み → VS 類似検索 →（任意）MMR/フィルタ/時間減衰 → コンテキスト結合 → 出典付与して応答 | `query`, VSID → 回答テキスト＋出典 | Top-k/テンプレート/モデルは `config_yml.yml` で制御 |
-| `server.py` | **5 検索**＋**6 生成**（エンドポイント） | `a20` の処理を API/サーバとして公開（問い合わせ→検索→組立→応答） | HTTP/CLI → JSON/テキスト応答 | 運用時のエントリーポイント |
+| `a03_rag_search_cloud_vs.py` | **5 検索**＋**6 生成** | クエリ埋め込み → VS 類似検索 →（任意）MMR/フィルタ/時間減衰 → コンテキスト結合 → 出典付与して応答 | `query`, VSID → 回答テキスト＋出典 | Top-k/テンプレート/モデルは `config_yml.yml` で制御 |
+| `server.py` | **5 検索**＋**6 生成**（エンドポイント） | `a03_rag_search_cloud_vs.py` の処理を API/サーバとして公開（問い合わせ→検索→組立→応答） | HTTP/CLI → JSON/テキスト応答 | 運用時のエントリーポイント |
 | `setup.py` | 0 環境土台 | 依存導入・CLI エントリ。RAG ロジックは持たない | - | - |
 | `docker-compose/docker-compose.yml` | （Cloud では通常未使用） | Qdrant を使わないため不要 | - | Local で使用 |
 
-> Cloud 版では、`a10_show_qdrant_data.py` / `a50_qdrant_registration.py` / `a50_rag_search_local_qdrant.py` は対象外です（Qdrant 用）。
+> Cloud 版では、`a40_show_qdrant_data.py` / `a30_qdrant_registration.py` / `a50_rag_search_local_qdrant.py` は対象外です（Qdrant 用）。
 
 ---
 
@@ -129,13 +182,13 @@ graph TD
 |---|---|---|---|---|
 | `docker-compose/docker-compose.yml` | **4/5 の「器」** | Qdrant の起動・永続化・ポートを定義（HNSW 実体は Qdrant 内） | compose 設定 → Qdrant ランタイム | `docker compose up -d` |
 | `a01_load_set_rag_data.py` | **1 前処理**＋**2 チャンク分割** | 正規化／メタ抽出 → 文字数基準＋オーバーラップ分割 | 原文, `config_yml.yml` → `OUTPUT/processed/*.jsonl` | Cloud と共通の前段 |
-| `a50_qdrant_registration.py` | **3 ベクトル化**＋**4 インデックス化（Local）** | 各チャンクを埋め込み →（Cosine 運用なら **L2 正規化**）→ Qdrant コレクション作成（`m`, `ef_construct`）→ upsert（本文・メタ・`chunk_id` を payload） | `OUTPUT/processed/*.jsonl` → Qdrant コレクション | `distance=Cosine` を推奨（または L2 正規化を徹底） |
-| `a10_show_qdrant_data.py` | **4 インデックス検証** | コレクション一覧/件数/スキーマ/任意ポイントの payload を可視化 | Qdrant → 表示/ログ | 登録品質の点検用 |
+| `a30_qdrant_registration.py` | **3 ベクトル化**＋**4 インデックス化（Local）** | 各チャンクを埋め込み →（Cosine 運用なら **L2 正規化**）→ Qdrant コレクション作成（`m`, `ef_construct`）→ upsert（本文・メタ・`chunk_id` を payload） | `OUTPUT/processed/*.jsonl` → Qdrant コレクション | `distance=Cosine` を推奨（または L2 正規化を徹底） |
+| `a40_show_qdrant_data.py` | **4 インデックス検証** | コレクション一覧/件数/スキーマ/任意ポイントの payload を可視化 | Qdrant → 表示/ログ | 登録品質の点検用 |
 | `a50_rag_search_local_qdrant.py` | **5 検索**＋**6 生成** | クエリ埋め込み → Qdrant 検索（`top_k`,`ef`）＋メタフィルタ →（任意）MMR/再ランク → コンテキスト結合 → 出典付与 | `query`, Qdrant → 回答テキスト＋出典 | 検索パラメタは `config_yml.yml` |
 | `server.py` | **5 検索**＋**6 生成**（エンドポイント） | `a50_rag_search_local_qdrant.py` の処理を API/サーバとして公開 | HTTP/CLI → JSON/テキスト応答 | 運用時のエントリーポイント |
 | `setup.py` | 0 環境土台 | 依存導入・CLI エントリ。RAG ロジックは持たない | - | - |
 
-> Local 版では、`a02_set_vector_store_vsid.py` / `a20_rag_search_cloud_vs.py` は対象外です（Cloud 専用）。
+> Local 版では、`a02_set_vector_store_vsid.py` / `a03_rag_search_cloud_vs.py` は対象外です（Cloud 専用）。
 
 ---
 
@@ -157,14 +210,14 @@ graph TD
 ### Cloud（Vector Store）
 1. `a01_load_set_rag_data.py`：**1 前処理＋2 分割**
 2. `a02_set_vector_store_vsid.py`：**3 ベクトル化＋4 インデックス化（Cloud）**
-3. `a20_rag_search_cloud_vs.py`（or `server.py`）：**5 検索＋6 生成**
+3. `a03_rag_search_cloud_vs.py`（or `server.py`）：**5 検索＋6 生成**
 
 ### Local（Qdrant）
 1. `a01_load_set_rag_data.py`：**1 前処理＋2 分割**
 2. `docker compose up -d`：**Qdrant 起動**
-3. `a50_qdrant_registration.py`：**3 ベクトル化＋4 インデックス化（Local）**
+3. `a30_qdrant_registration.py`：**3 ベクトル化＋4 インデックス化（Local）**
 4. `a50_rag_search_local_qdrant.py`（or `server.py`）：**5 検索＋6 生成**
-5. 必要に応じて `a10_show_qdrant_data.py`：**4 検証**
+5. 必要に応じて `a40_show_qdrant_data.py`：**4 検証**
 
 ---
 
@@ -222,9 +275,9 @@ git clone <repository-url>
 cd openai_rag_jp
 
 # 2. Python仮想環境の作成
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate   # Windows
+python -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+# .venv\Scripts\activate   # Windows
 
 # 3. 依存パッケージのインストール
 pip install -r requirements.txt
@@ -286,14 +339,14 @@ streamlit run a01_load_set_rag_data.py --server.port=8501
 
 ```bash
 # OpenAI Vector Storeの作成
-python a02_make_vsid.py
+python a02_set_vector_store_vsid.py
 ```
 
 #### 🏠 ローカル版（Qdrant）
 
 ```bash
 # Qdrantへのデータ登録（詳細版）
-python a50_qdrant_registration.py --recreate --include-answer
+python a30_qdrant_registration.py --recreate --include-answer
 
 # または簡易版（テスト用）
 python qdrant_data_loader.py --recreate --limit 100
@@ -305,14 +358,14 @@ python qdrant_data_loader.py --recreate --limit 100
 
 ```bash
 # Streamlit UIで検索（OpenAI Vector Store使用）
-streamlit run a03_rag_search.py
+streamlit run a03_rag_search_cloud_vs.py
 ```
 
 #### 🏠 ローカル版検索
 
 ```bash
 # Streamlit UIで検索（Qdrant使用）
-streamlit run a50_qdrant_search.py
+streamlit run a50_rag_search_local_qdrant.py
 ```
 
 ## 📁 プロジェクト構成
@@ -336,13 +389,13 @@ openai_rag_jp/
 │   └── a01_load_set_rag_data.py    # 統合RAGデータ処理ツール（HuggingFaceからダウンロード＆処理）
 │
 ├── ☁️ クラウド版RAG
-│   ├── a02_make_vsid.py             # OpenAI Vector Store作成
-│   └── a03_rag_search.py            # クラウド版RAG検索
+│   ├── a02_set_vector_store_vsid.py # OpenAI Vector Store作成
+│   └── a03_rag_search_cloud_vs.py   # クラウド版RAG検索
 │
 ├── 🏠 ローカル版RAG
-│   ├── a50_qdrant_registration.py   # Qdrantデータ登録
-│   ├── a50_qdrant_search.py        # Qdrant RAG検索
-│   ├── a10_show_qdrant_data.py     # Qdrantデータ表示
+│   ├── a30_qdrant_registration.py   # Qdrantデータ登録
+│   ├── a50_rag_search_local_qdrant.py # Qdrant RAG検索
+│   ├── a40_show_qdrant_data.py     # Qdrantデータ表示
 │   └── qdrant_data_loader.py       # 簡易データローダー
 │
 ├── 🛠️ ヘルパーモジュール
@@ -385,10 +438,10 @@ openai_rag_jp/
 
 | ドキュメント | 内容 |
 |------------|------|
-| [doc/a20_rag_search_cloud_vs.md](doc/a20_rag_search_cloud_vs.md) | クラウド版RAG検索詳細 |
+| [doc/a03_rag_search_cloud_vs.md](doc/a03_rag_search_cloud_vs.md) | クラウド版RAG検索詳細 |
 | [doc/a50_rag_search_local_qdrant.md](doc/a50_rag_search_local_qdrant.md) | ローカル版RAG検索詳細 |
-| [doc/a10_show_qdrant_data.md](doc/a10_show_qdrant_data.md) | Qdrantデータ表示ツール |
-| [doc/a50_qdrant_registration.md](doc/a50_qdrant_registration.md) | Qdrantデータ登録詳細 |
+| [doc/a40_show_qdrant_data.md](doc/a40_show_qdrant_data.md) | Qdrantデータ表示ツール |
+| [doc/a30_qdrant_registration.md](doc/a30_qdrant_registration.md) | Qdrantデータ登録詳細 |
 
 ### ⚙️ 共通モジュール
 
@@ -409,12 +462,12 @@ streamlit run a01_load_set_rag_data.py
 # UIで「カスタマーサポート」を選択して処理
 
 # クラウド版で実行
-python a02_make_vsid.py
-streamlit run a03_rag_search.py
+python a02_set_vector_store_vsid.py
+streamlit run a03_rag_search_cloud_vs.py
 
 # またはローカル版で実行
-python a50_qdrant_registration.py --domain customer
-streamlit run a50_qdrant_search.py
+python a30_qdrant_registration.py --domain customer
+streamlit run a50_rag_search_local_qdrant.py
 ```
 
 ### 例2: 医療情報検索システム
@@ -425,8 +478,8 @@ streamlit run a01_load_set_rag_data.py
 # UIで「医療QA」を選択、Complex_CoTを含めて処理
 
 # ローカルQdrantで構築
-python a50_qdrant_registration.py --domain medical --include-answer
-streamlit run a50_qdrant_search.py
+python a30_qdrant_registration.py --domain medical --include-answer
+streamlit run a50_rag_search_local_qdrant.py
 ```
 
 ### 例3: マルチドメイン統合検索
@@ -437,8 +490,8 @@ streamlit run a01_load_set_rag_data.py
 # UIで各ドメインを順番に選択して処理
 
 # 統合検索システムの構築
-python a50_qdrant_registration.py --recreate
-streamlit run a50_qdrant_search.py  # ALLドメインを選択
+python a30_qdrant_registration.py --recreate
+streamlit run a50_rag_search_local_qdrant.py  # ALLドメインを選択
 ```
 
 ## ⚙️ 設定カスタマイズ
@@ -475,7 +528,7 @@ qdrant:
 
 ```python
 # 大量データの効率的処理
-python a50_qdrant_registration.py --batch-size 100
+python a30_qdrant_registration.py --batch-size 100
 ```
 
 ### キャッシュの利用
@@ -512,7 +565,7 @@ streamlit run a01_load_set_rag_data.py
 # HuggingFaceから最新データをダウンロード＆処理
 
 # ベクトルストアの更新
-python a50_qdrant_registration.py --recreate
+python a30_qdrant_registration.py --recreate
 ```
 
 ### バックアップ

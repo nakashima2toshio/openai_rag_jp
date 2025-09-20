@@ -222,7 +222,7 @@ def main():
     except Exception as e:
         print(f"❌ Qdrantサーバーに接続できません: {e}")
         print("Qdrantサーバーを起動してください:")
-        print("  docker run -p 6333:6333 qdrant/qdrant")
+        print("  cd docker-compose && docker-compose up -d")
         return 1
     
     # コレクションセットアップ
