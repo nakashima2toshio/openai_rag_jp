@@ -6,11 +6,12 @@ a01_load_set_rag_data.py - 統合RAGデータ処理ツール
 起動: streamlit run a01_load_set_rag_data.py --server.port=8501
 
 【主要機能】
-✅ 4種類のデータセットタイプを統合処理
+✅ 5種類のデータセットタイプを統合処理
    - カスタマーサポート・FAQ
    - 医療QAデータ
    - 科学・技術QA（SciQ）
    - 法律・判例QA
+   - 雑学QA（TriviaQA）
 ✅ データ検証・品質チェック
 ✅ RAG用テキスト結合・前処理
 ✅ トークン使用量推定
@@ -21,7 +22,7 @@ a01_load_set_rag_data.py - 統合RAGデータ処理ツール
 2. medical_qa: 医療分野のQ&Aデータ（推論過程付き）
 3. sciq_qa: 科学・技術分野のQ&Aデータ（選択肢付き）
 4. legal_qa: 法律・判例に関するQ&Aデータ
-5. tirivia_qa: 雑学のQA
+5. trivia_qa: 雑学のQA
 """
 
 import streamlit as st
@@ -151,6 +152,43 @@ def validate_legal_data_specific(df: pd.DataFrame) -> List[str]:
         categories = pd.cut(answer_lengths, bins=[0, 50, 100, 200, 500, float('inf')], 
                           labels=['超短文', '短文', '中文', '長文', '超長文'])
         st.info(f"💡 回答の長さ分布: {categories.value_counts().to_dict()}")
+    
+    return issues
+
+def validate_trivia_data_specific(df: pd.DataFrame) -> List[str]:
+    """雑学QAデータ固有の検証"""
+    issues = []
+    
+    if 'question' in df.columns and 'answer' in df.columns:
+        # 雑学的なキーワードの確認（幅広いトピック）
+        trivia_keywords = ['誰', '何', 'どこ', 'いつ', 'なぜ', 'どの', 'who', 'what', 'where', 'when', 'why', 'which']
+        has_trivia_content = df['question'].str.contains('|'.join(trivia_keywords), na=False, case=False).any()
+        if not has_trivia_content:
+            issues.append("⚠️ 一般的な質問形式のキーワードが見つかりません")
+        
+        # 回答の簡潔性チェック
+        avg_answer_length = df['answer'].str.len().mean()
+        if avg_answer_length > 500:
+            issues.append(f"⚠️ 回答が長すぎる可能性があります（平均{avg_answer_length:.0f}文字）")
+        
+        # エンティティページの存在確認
+        if 'entity_pages' in df.columns:
+            entity_non_empty = df['entity_pages'].notna().sum()
+            st.info(f"💡 エンティティページ付きデータ: {entity_non_empty}/{len(df)} ({entity_non_empty/len(df)*100:.1f}%)")
+        
+        # 検索結果の存在確認
+        if 'search_results' in df.columns:
+            search_non_empty = df['search_results'].notna().sum()
+            st.info(f"💡 検索結果（コンテキスト）付きデータ: {search_non_empty}/{len(df)} ({search_non_empty/len(df)*100:.1f}%)")
+        
+        # 質問の多様性チェック
+        question_starts = df['question'].str[:10]  # 最初の10文字
+        unique_starts = question_starts.nunique()
+        diversity_ratio = unique_starts / len(df) * 100
+        if diversity_ratio < 50:
+            st.warning(f"⚠️ 質問の多様性が低い可能性があります（{diversity_ratio:.1f}%）")
+        else:
+            st.info(f"💡 質問の多様性: {diversity_ratio:.1f}%")
     
     return issues
 
@@ -571,6 +609,8 @@ def main():
                 specific_issues = validate_sciq_data_specific(df)
             elif selected_dataset == "legal_qa":
                 specific_issues = validate_legal_data_specific(df)
+            elif selected_dataset == "trivia_qa":
+                specific_issues = validate_trivia_data_specific(df)
             else:
                 specific_issues = []
             
