@@ -196,6 +196,11 @@ st.code("""
   - 例ば、日本語「返金は可能ですか？」と英語「Can I get a refund?」の類似度が0.4957と高い値を示している
   - この多言語embedding機能により、翻訳なしで日英間の意味的検索が実現されている。
   - 左ペインで、個別domainを選択すると質問・候補が表示されます。
+  - 5. 実用的な閾値の目安（Score:）
+  - 0.8以上: 非常に関連性が高い（ほぼ一致）
+  - 0.6-0.8: 関連性がある（有用な結果）
+  - 0.4-0.6: 部分的に関連（参考程度）
+  - 0.4未満: 関連性が低い（フィルタリング推奨）
 """)
 query = st.text_input("Enter your query", value=st.session_state['selected_query'])
 do_search = st.button("Search")

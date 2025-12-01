@@ -1,6 +1,28 @@
-# 🚀 RAG(Cloud & local-Qdrant)From Scratch with Streamlit
+# 🚀 RAG From Scratch with Streamlit（旧版）
 ## スクラッチで、RAG構築（クラウド版＆ローカル-Qdrant版）
-- If you prefer English, please use translation tools like Google Translate to read the English version.
+
+### 新版は：
+## Gemini版　RAGシステム
+https://github.com/nakashima2toshio/gemini3_rag_qa
+
+## OpenAI版　RAGシステム
+https://github.com/nakashima2toshio/openai_rag_qa_jp
+
+## はじめに
+#### ローカルRAG(Qdrant利用)　と　OpenAI Vector Storeの違い
+
+| 項目        | ローカルRAG（Qdrant）                    | OpenAI Vector Store             |
+|-----------|------------------------------------|---------------------------------|
+| チャンク分割    | 行単位（Q&Aペア）                         | 文字数ベースで分割、句読点考慮                 |
+| チャンクサイズ   | 各行が1チャンク                           | 1000-16000文字、オーバーラップ付き          |
+| Embedding | OpenAI APIを明示的に呼び出し                | OpenAIが内部で自動実行                  |
+| ベクトルDB    | Qdrant（ローカル）                       | OpenAI管理のクラウド - OpenAI-Vector Store                 |
+| メタデータ     | payload（domain, question, answer等） | metadata（dataset, chunk_index等） |
+| 検索フィルタ    | domainフィールドでフィルタ可能                 | APIでのフィルタオプション                  |
+| コスト       | Embeddingのみ課金                      | Embedding＋ストレージ課金               |
+| 管理        | 自己管理（Docker等）                      | OpenAIが完全管理                     |
+
+
 ## 📚 ドキュメント
 
 詳細な使用方法とサンプルプログラムについては：

@@ -29,6 +29,9 @@ class AppConfig:
 
     # 利用可能なモデル
     AVAILABLE_MODELS = [
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-5",
         "gpt-4o",
         "gpt-4o-mini",
         "gpt-4o-audio-preview",
@@ -43,10 +46,13 @@ class AppConfig:
         "o4-mini"
     ]
 
-    DEFAULT_MODEL = "gpt-4o-mini"
+    DEFAULT_MODEL = "gpt-5-mini"
 
     # モデル料金（1000トークンあたりのドル）
     MODEL_PRICING = {
+        "gpt-5"                    : {"input": 0.01, "output": 0.03},
+        "gpt-5-mini"               : {"input": 0.0001, "output": 0.0004},
+        "gpt-5-nano"               : {"input": 0.00005, "output": 0.0002},
         "gpt-4o"                   : {"input": 0.005, "output": 0.015},
         "gpt-4o-mini"              : {"input": 0.00015, "output": 0.0006},
         "gpt-4o-audio-preview"     : {"input": 0.01, "output": 0.02},
@@ -63,6 +69,9 @@ class AppConfig:
 
     # モデル制限
     MODEL_LIMITS = {
+        "gpt-5"                    : {"max_tokens": 256000, "max_output": 8192},
+        "gpt-5-mini"               : {"max_tokens": 128000, "max_output": 4096},
+        "gpt-5-nano"               : {"max_tokens": 64000, "max_output": 2048},
         "gpt-4o"                   : {"max_tokens": 128000, "max_output": 4096},
         "gpt-4o-mini"              : {"max_tokens": 128000, "max_output": 4096},
         "gpt-4o-audio-preview"     : {"max_tokens": 128000, "max_output": 4096},
